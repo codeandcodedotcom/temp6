@@ -1,0 +1,44 @@
+{
+  "project_title": "Global ERP Rollout",
+  "domain": "IT",
+  "budget_range": "Over 5M USD",
+  "timeline": "24+ months",
+  "project_description": "Implement a global ERP system across all regions, integrating finance, HR, supply chain, and customer systems. High vendor involvement and strategic priority.",
+  "questions": [
+    {
+      "id": "q1",
+      "text": "Do you have approved budget?",
+      "options": [
+        { "id": "opt1", "label": "Yes", "score": 15 }
+      ],
+      "type": "single-choice"
+    },
+    {
+      "id": "q2",
+      "text": "What is the expected project team size?",
+      "options": [
+        { "id": "opt4", "label": "50+ members", "score": 15 }
+      ],
+      "type": "single-choice"
+    },
+    {
+      "id": "q3",
+      "text": "Is this project cross-departmental?",
+      "options": [
+        { "id": "opt3", "label": "Yes, across 10 departments", "score": 12 }
+      ],
+      "type": "single-choice"
+    },
+    {
+      "id": "q4",
+      "text": "Is there external vendor involvement?",
+      "options": [
+        { "id": "opt3", "label": "Yes, 5 vendors", "score": 12 }
+      ],
+      "type": "single-choice"
+    }
+  ],
+  "additional_context": "This ERP project has executive sponsorship, multiple global vendors, and tight deadlines. Expected to transform core operations across regions.",
+  "user_id": "sponsor.john.smith@example.com",
+  "submission_id": "demo-critical"
+}
