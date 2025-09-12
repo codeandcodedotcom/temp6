@@ -1,0 +1,36 @@
+curl http://127.0.0.1:5000/api/questionnaire
+
+curl http://127.0.0.1:5000/api/health
+
+curl http://127.0.0.1:5000/api/ready
+
+curl http://127.0.0.1:5000/api/submissions
+
+curl http://127.0.0.1:5000/api/submissions/1
+
+curl -X POST http://127.0.0.1:5000/api/generation/ask ^
+  -H "Content-Type: application/json" ^
+  -d "{ \"project_title\": \"CRM Upgrade\", \"domain\": \"IT\", \"budget_range\": \"10k-50k\", \"timeline\": \"6 months\", \"project_description\": \"Upgrade CRM platform to improve customer management.\", \"questions\": [ { \"id\": \"q1\", \"question\": \"Do you have approved budget?\", \"answer\": \"Yes\", \"score\": 5 } ], \"additional_context\": \"Pilot run\", \"user_id\": \"alice@example.com\" }"
+
+curl http://127.0.0.1:5000/api/kpi/department-charters
+
+curl http://127.0.0.1:5000/api/kpi/returning-users
+
+curl "http://127.0.0.1:5000/api/kpi/returning-users?days=30"
+
+curl "http://127.0.0.1:5000/api/kpi/user-activity?limit=5"
+
+curl -X POST http://127.0.0.1:5000/api/test/test_embedding ^
+  -H "Content-Type: application/json" ^
+  -d "{ \"text\": \"Hello world embedding test\" }"
+
+curl -X POST http://127.0.0.1:5000/api/test/test_llm ^
+  -H "Content-Type: application/json" ^
+  -d "{ \"prompt\": \"Summarize the benefits of cloud computing.\" }"
+
+curl -X POST http://127.0.0.1:5000/api/test/test_retriever ^
+  -H "Content-Type: application/json" ^
+  -d "{ \"text\": \"project management best practices\" }"
+
+curl -X POST "http://127.0.0.1:5000/api/generation/ask" -H "Content-Type: application/json" --data-binary @payload.json
+

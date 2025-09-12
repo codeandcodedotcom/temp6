@@ -1,0 +1,487 @@
+{
+    "id": "questionnaire-v0.1",
+    "title": "Project Charter Questionnaire",
+    "questions": [
+        {
+            "id": "q01",
+            "type": "radio",
+            "text": "Do you have approved budget and/or authorisation to proceed by your relevant business portfolio?",
+            "options": [
+                {
+                    "id": "q01_opt1",
+                    "label": "Yes",
+                    "score": null
+                },
+                {
+                    "id": "q01_opt2",
+                    "label": "No",
+                    "score": null
+                }
+            ]
+        },
+        {
+            "id": "q02",
+            "type": "radio",
+            "text": "Can you specify your Project Type / Capability",
+            "options": [
+                {
+                    "id": "q02_opt1",
+                    "label": "Technical Program Management",
+                    "score": null
+                },
+                {
+                    "id": "q02_opt2",
+                    "label": "Contract Performance Management",
+                    "score": null
+                },
+                {
+                    "id": "q02_opt3",
+                    "label": "Infrastructure Projects",
+                    "score": null
+                },
+                {
+                    "id": "q02_opt4",
+                    "label": "Strategic Business Development",
+                    "score": null
+                },
+                {
+                    "id": "q02_opt5",
+                    "label": "IT Program Management",
+                    "score": null
+                },
+                {
+                    "id": "q02_opt6",
+                    "label": "Supply Chain Management",
+                    "score": null
+                },
+                {
+                    "id": "q02_opt7",
+                    "label": "Government Funding",
+                    "score": null
+                }
+            ]
+        },
+        {
+            "id": "q03",
+            "type": "radio",
+            "text": "Is your project Product related?",
+            "options": [
+                {
+                    "id": "q03_opt1",
+                    "label": "Yes",
+                    "score": null
+                },
+                {
+                    "id": "q03_opt2",
+                    "label": "No",
+                    "score": null
+                }
+            ]
+        },
+        {
+            "id": "q04",
+            "type": "radio",
+            "text": "What is your expected budget?",
+            "options": [
+                {
+                    "id": "q04_opt1",
+                    "label": "Less 1 million",
+                    "score": 1
+                },
+                {
+                    "id": "q04_opt2",
+                    "label": "Between 2-10 million",
+                    "score": 2
+                },
+                {
+                    "id": "q04_opt3",
+                    "label": "Between 11-100 million",
+                    "score": 3
+                },
+                {
+                    "id": "q04_opt4",
+                    "label": "More than 101 million",
+                    "score": 4
+                }
+            ]
+        },
+        {
+            "id": "q05",
+            "type": "radio",
+            "text": "What is the current ERL* for the project?",
+            "options": [
+                {
+                    "id": "q05_opt1",
+                    "label": "7+",
+                    "score": 0
+                },
+                {
+                    "id": "q05_opt2",
+                    "label": "5-6",
+                    "score": 4
+                },
+                {
+                    "id": "q05_opt3",
+                    "label": "<5",
+                    "score": 2
+                },
+                {
+                    "id": "q05_opt4",
+                    "label": "No score",
+                    "score": 4
+                }
+            ]
+        },
+        {
+            "id": "q06",
+            "type": "radio",
+            "text": "Is the project government or military funded?",
+            "options": [
+                {
+                    "id": "q06_opt1",
+                    "label": "No",
+                    "score": 2
+                },
+                {
+                    "id": "q06_opt2",
+                    "label": "Yes",
+                    "score": 4
+                },
+                {
+                    "id": "q06_opt3",
+                    "label": "Yes, it is funded 50/50 by the company and by public funding",
+                    "score": 2
+                },
+                {
+                    "id": "q06_opt4",
+                    "label": "My function is not supported by military funding",
+                    "score": 4
+                }
+            ]
+        },
+        {
+            "id": "q07",
+            "type": "radio",
+            "text": "What is the degree of novelty for RR (new technology, supply chain, supplier, contract terms, organisation, methodology, IT services etc.)?",
+            "options": [
+                {
+                    "id": "q07_opt1",
+                    "label": "Rolls-Royce has substantial expertise in this area, with established development and standardisation.",
+                    "score": 1
+                },
+                {
+                    "id": "q07_opt2",
+                    "label": "Rolls-Royce is familiar with this area and sees it as an opportunity for improvement and growth.",
+                    "score": 2
+                },
+                {
+                    "id": "q07_opt3",
+                    "label": "Rolls-Royce is aware of this area, and it is currently being developed elsewhere.",
+                    "score": 3
+                },
+                {
+                    "id": "q07_opt4",
+                    "label": "This is highly novel, both for Rolls-Royce and globally.",
+                    "score": 4
+                }
+            ]
+        },
+        {
+            "id": "q08",
+            "type": "radio",
+            "text": "How is the overall stability of the project?",
+            "options": [
+                {
+                    "id": "q08_opt1",
+                    "label": "Very high - the business case is well defined and clear.",
+                    "score": 1
+                },
+                {
+                    "id": "q08_opt2",
+                    "label": "High - the business case is established with limited risks.",
+                    "score": 2
+                },
+                {
+                    "id": "q08_opt3",
+                    "label": "Moderate - the business case and the related risks are understood.",
+                    "score": 3
+                },
+                {
+                    "id": "q08_opt4",
+                    "label": "Low - the business case is very volatile, is high level risks, and requirements are difficult to capture and anticipate.",
+                    "score": 4
+                }
+            ]
+        },
+        {
+            "id": "q09",
+            "type": "radio",
+            "text": "What is the status of the cross-functional project team?",
+            "options": [
+                {
+                    "id": "q09_opt1",
+                    "label": "The resources are engaged via capability owners.",
+                    "score": 1
+                },
+                {
+                    "id": "q09_opt2",
+                    "label": "Bulk resources are available in 5 Year Plan but not committed by capability owners.",
+                    "score": 2
+                },
+                {
+                    "id": "q09_opt3",
+                    "label": "Required resources estimated but capability owners not engaged.",
+                    "score": 3
+                },
+                {
+                    "id": "q09_opt4",
+                    "label": "Resources are volatile and not agreed with high confidence.",
+                    "score": 4
+                }
+            ]
+        },
+        {
+            "id": "q10",
+            "type": "radio",
+            "text": "What is the number of functions or capabilities involved in the project (including: core engineering disciplines, management of SME, etc.)?",
+            "options": [
+                {
+                    "id": "q10_opt1",
+                    "label": "Few (less than 5).",
+                    "score": 1
+                },
+                {
+                    "id": "q10_opt2",
+                    "label": "Several (5 to 9).",
+                    "score": 2
+                },
+                {
+                    "id": "q10_opt3",
+                    "label": "Relatively diverse (10 to 14).",
+                    "score": 3
+                },
+                {
+                    "id": "q10_opt4",
+                    "label": "Very diverse (15 or more, involving multiple disciplines and methods).",
+                    "score": 4
+                }
+            ]
+        },
+        {
+            "id": "q11",
+            "type": "radio",
+            "text": "To what extent do project risks reach?",
+            "options": [
+                {
+                    "id": "q11_opt1",
+                    "label": "No significant areas of concern have been identified.",
+                    "score": 1
+                },
+                {
+                    "id": "q11_opt2",
+                    "label": "Risks are limited to local or domestic matters that are easily managed.",
+                    "score": 2
+                },
+                {
+                    "id": "q11_opt3",
+                    "label": "There are several legal or contractual challenges within a single country, requiring support from subject matter experts or legal counsel.",
+                    "score": 3
+                },
+                {
+                    "id": "q11_opt4",
+                    "label": "Major legal complexities are involved, such as joint ventures, navigating multiple legal systems across countries, international arbitration, or contracts established outside the company’s home country.",
+                    "score": 4
+                }
+            ]
+        },
+        {
+            "id": "q12",
+            "type": "radio",
+            "text": "The advancement of the project is approved and governed at:",
+            "options": [
+                {
+                    "id": "q12_opt1",
+                    "label": "Department level (CEO -3).",
+                    "score": 1
+                },
+                {
+                    "id": "q12_opt2",
+                    "label": "Business level (CEO -2).",
+                    "score": 2
+                },
+                {
+                    "id": "q12_opt3",
+                    "label": "Sector level (CEO -1).",
+                    "score": 3
+                },
+                {
+                    "id": "q12_opt4",
+                    "label": "Board level.",
+                    "score": 4
+                }
+            ]
+        },
+        {
+            "id": "q13",
+            "type": "radio",
+            "text": "The strategic alignment with Rolls-Royce (across customers, sectors, and regions) can be described as follow:",
+            "options": [
+                {
+                    "id": "q13_opt1",
+                    "label": "Focus is limited to internal customers, with scope restricted to the local business.",
+                    "score": 1
+                },
+                {
+                    "id": "q13_opt2",
+                    "label": "Involvement is considered for both internal and external customers and is geographically limited.",
+                    "score": 2
+                },
+                {
+                    "id": "q13_opt3",
+                    "label": "Involvement is considered for both internal and external customers, with additional global significance.",
+                    "score": 3
+                },
+                {
+                    "id": "q13_opt4",
+                    "label": "Involvement extends to external customers, is of global importance, and spans more than two divisions.",
+                    "score": 4
+                }
+            ]
+        },
+        {
+            "id": "q14",
+            "type": "radio",
+            "text": "Which statement best describes the reputational risks related to health, safety, environment, or publicly stated commitments for this project?",
+            "options": [
+                {
+                    "id": "q14_opt1",
+                    "label": "No reputational concerns or risks identified.",
+                    "score": 1
+                },
+                {
+                    "id": "q14_opt2",
+                    "label": "Limited reputational concerns or risks identified, all easily manageable.",
+                    "score": 2
+                },
+                {
+                    "id": "q14_opt3",
+                    "label": "Multiple reputational concerns or risks identified, all easily manageable.",
+                    "score": 3
+                },
+                {
+                    "id": "q14_opt4",
+                    "label": "Multiple potential reputational concerns identified.",
+                    "score": 4
+                }
+            ]
+        },
+        {
+            "id": "q15",
+            "type": "radio",
+            "text": "How would you describe the alignment of stakeholders on scope, requirements, and objectives for this activity?",
+            "options": [
+                {
+                    "id": "q15_opt1",
+                    "label": "Stakeholders are highly aligned; there are few stakeholders with limited influence.",
+                    "score": 1
+                },
+                {
+                    "id": "q15_opt2",
+                    "label": "Stakeholders are moderately aligned; there are multiple stakeholders with limited influence.",
+                    "score": 2
+                },
+                {
+                    "id": "q15_opt3",
+                    "label": "Stakeholders have low alignment; there are multiple stakeholders with varying levels of influence.",
+                    "score": 3
+                },
+                {
+                    "id": "q15_opt4",
+                    "label": "Stakeholders have very low alignment; there are multiple stakeholders with significant influence.",
+                    "score": 4
+                }
+            ]
+        },
+        {
+            "id": "q16",
+            "type": "radio",
+            "text": "How many partners or contractors are actively involved in the project?",
+            "options": [
+                {
+                    "id": "q16_opt1",
+                    "label": "No partners or contractors are involved.",
+                    "score": 1
+                },
+                {
+                    "id": "q16_opt2",
+                    "label": "A small group (1-2) of partners or contractors are involved.",
+                    "score": 2
+                },
+                {
+                    "id": "q16_opt3",
+                    "label": "A moderate group (3-4) of partners or contractors are involved.",
+                    "score": 3
+                },
+                {
+                    "id": "q16_opt4",
+                    "label": "A large, diverse consortium of partners or contractors is involved.",
+                    "score": 4
+                }
+            ]
+        },
+        {
+            "id": "q17",
+            "type": "radio",
+            "text": "Considering only the core supply chain entities directly managed in the project, how many of them are involved?",
+            "options": [
+                {
+                    "id": "q17_opt1",
+                    "label": "None - No core supply chain entities are directly managed.",
+                    "score": 1
+                },
+                {
+                    "id": "q17_opt2",
+                    "label": "1-3 - A small number of core supply chain entities are directly managed.",
+                    "score": 2
+                },
+                {
+                    "id": "q17_opt3",
+                    "label": "4-5 - A moderate number of core supply chain entities are directly managed.",
+                    "score": 3
+                },
+                {
+                    "id": "q17_opt4",
+                    "label": "More than 5 - A large number of core supply chain entities are directly managed.",
+                    "score": 4
+                }
+            ]
+        },
+        {
+            "id": "q18",
+            "type": "radio",
+            "text": "How many divisions and/or enabling functions, sites, and languages are involved in the project?",
+            "options": [
+                {
+                    "id": "q18_opt1",
+                    "label": "1 division/function, 1 site, 1 first language",
+                    "score": 1
+                },
+                {
+                    "id": "q18_opt2",
+                    "label": "2-3 divisions/functions, 2-3 sites, 1 first language",
+                    "score": 2
+                },
+                {
+                    "id": "q18_opt3",
+                    "label": "2-3 divisions/functions, 2-3 sites, more than 1 first language",
+                    "score": 3
+                },
+                {
+                    "id": "q18_opt4",
+                    "label": "More than 3 divisions/functions, more than 3 sites, more than 1 first language",
+                    "score": 4
+                }
+            ]
+        }
+    ]
+}

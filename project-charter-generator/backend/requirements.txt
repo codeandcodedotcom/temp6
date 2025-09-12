@@ -1,0 +1,13 @@
+python-dotenv
+openai
+langchain
+langchain-community
+sentence-transformers
+faiss-cpu
+streamlit
+Flask
+flask-cors
+httpx
+PyJWT
+requests
+pytest

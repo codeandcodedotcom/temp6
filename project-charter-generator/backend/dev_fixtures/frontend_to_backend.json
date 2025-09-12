@@ -1,0 +1,24 @@
+{
+    "project_title": "string",
+    "domain": "string",
+    "budget_range": "string",
+    "timeline": "string",
+    "project_description": "string",
+    "questions": [
+        {
+            "id": "string",
+            "text": "string",
+            "options": [
+                {
+                    "id": "string",
+                    "label": "string",
+                    "score": "integer"
+                }
+            ],
+            "type": "string"
+        }
+    ],
+    "additional_context": "string",
+    "user_id": "string",
+    "submission_id": "string"
+}

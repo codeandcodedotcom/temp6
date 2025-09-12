@@ -1,0 +1,184 @@
+{
+    "department_charters": [
+        {
+            "department": "Engineering",
+            "charterCount": 25,
+            "color": "#3B82F6"
+        },
+        {
+            "department": "Marketing",
+            "charterCount": 18,
+            "color": "#14B8A6"
+        },
+        {
+            "department": "Sales",
+            "charterCount": 22,
+            "color": "#F97316"
+        },
+        {
+            "department": "HR",
+            "charterCount": 12,
+            "color": "#8B5CF6"
+        },
+        {
+            "department": "Finance",
+            "charterCount": 16,
+            "color": "#EF4444"
+        },
+        {
+            "department": "Operations",
+            "charterCount": 20,
+            "color": "#10B981"
+        }
+    ],
+    "returning_users": [
+        {
+            "date": "2025-09-03",
+            "returningUsers": 145,
+            "newUsers": 32,
+            "totalUsers": 177
+        },
+        {
+            "date": "2025-09-04",
+            "returningUsers": 152,
+            "newUsers": 28,
+            "totalUsers": 180
+        },
+        {
+            "date": "2025-09-05",
+            "returningUsers": 148,
+            "newUsers": 35,
+            "totalUsers": 183
+        },
+        {
+            "date": "2025-09-06",
+            "returningUsers": 156,
+            "newUsers": 41,
+            "totalUsers": 197
+        },
+        {
+            "date": "2025-09-07",
+            "returningUsers": 163,
+            "newUsers": 29,
+            "totalUsers": 192
+        },
+        {
+            "date": "2025-09-08",
+            "returningUsers": 158,
+            "newUsers": 38,
+            "totalUsers": 196
+        },
+        {
+            "date": "2025-09-09",
+            "returningUsers": 171,
+            "newUsers": 33,
+            "totalUsers": 204
+        },
+        {
+            "date": "2025-09-10",
+            "returningUsers": 168,
+            "newUsers": 45,
+            "totalUsers": 213
+        },
+        {
+            "date": "2025-09-11",
+            "returningUsers": 175,
+            "newUsers": 37,
+            "totalUsers": 212
+        },
+        {
+            "date": "2025-09-12",
+            "returningUsers": 182,
+            "newUsers": 42,
+            "totalUsers": 224
+        },
+        {
+            "date": "2025-09-13",
+            "returningUsers": 180,
+            "newUsers": 30,
+            "totalUsers": 210
+        },
+        {
+            "date": "2025-09-14",
+            "returningUsers": 194,
+            "newUsers": 48,
+            "totalUsers": 242
+        },
+        {
+            "date": "2025-09-15",
+            "returningUsers": 209,
+            "newUsers": 34,
+            "totalUsers": 235
+        },
+        {
+            "date": "2025-09-16",
+            "returningUsers": 198,
+            "newUsers": 52,
+            "totalUsers": 250
+        },
+        {
+            "date": "2025-09-17",
+            "returningUsers": 206,
+            "newUsers": 41,
+            "totalUsers": 247
+        }
+    ],
+    "user_activity": [
+        {
+            "userId": "1",
+            "name": "Sarah Johnson",
+            "chartersCreated": 12,
+            "lastLogin": "2025-09-10",
+            "totalLogins": 45
+        },
+        {
+            "userId": "2",
+            "name": "Michael Chen",
+            "chartersCreated": 8,
+            "lastLogin": "2025-09-09",
+            "totalLogins": 32
+        },
+        {
+            "userId": "3",
+            "name": "Emily Rodriguez",
+            "chartersCreated": 15,
+            "lastLogin": "2025-09-11",
+            "totalLogins": 67
+        },
+        {
+            "userId": "4",
+            "name": "David Thompson",
+            "chartersCreated": 6,
+            "lastLogin": "2025-09-08",
+            "totalLogins": 23
+        },
+        {
+            "userId": "5",
+            "name": "Lisa Wang",
+            "chartersCreated": 11,
+            "lastLogin": "2025-09-10",
+            "totalLogins": 41
+        },
+        {
+            "userId": "6",
+            "name": "James Wilson",
+            "chartersCreated": 9,
+            "lastLogin": "2025-09-11",
+            "totalLogins": 38
+        },
+        {
+            "userId": "7",
+            "name": "Anna Kowalski",
+            "chartersCreated": 13,
+            "lastLogin": "2025-09-09",
+            "totalLogins": 52
+        },
+        {
+            "userId": "8",
+            "name": "Robert Kim",
+            "chartersCreated": 7,
+            "lastLogin": "2025-09-08",
+            "totalLogins": 29
+        }
+    ]
+}
