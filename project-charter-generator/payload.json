@@ -1,11 +1,41 @@
 {
-    "project_title": "CRM Upgrade Initiative",
-    "domain": "IT",
-    "budget_range": "10k-50k",
-    "timeline": "6 months",
-    "project_description": "Upgrade CRM platform to improve customer management.",
-    "questions": [],
-    "additional_context": "Demo run",
-    "user_id": "alice@example.com",
-    "submission_id": "demo-001"
+    "project_title": "NextGen Learning Platform",
+    "domain": "Education",
+    "budget_range": "50k-100k",
+    "timeline": "12-18 months",
+    "project_description": "Develop and deploy a next-generation digital learning platform integrating AI tutors, analytics dashboards, and mobile-first design for global learners.",
+    "questions": [
+        {
+            "id": "q1",
+            "question": "Do you have approved budget?",
+            "answer": "Yes",
+            "score": 5
+        },
+        {
+            "id": "q2",
+            "question": "What is the expected project team size?",
+            "answer": "10-20 members",
+            "score": 6
+        },
+        {
+            "id": "q3",
+            "question": "Is this project cross-departmental?",
+            "answer": "Yes, across 3 departments",
+            "score": 6
+        },
+        {
+            "id": "q4",
+            "question": "Is there external vendor involvement?",
+            "answer": "Yes, 2 vendors",
+            "score": 5
+        }
+    ],
+    "additional_context": "This project is a strategic priority for the organization and has board-level visibility. Early pilots will be run in Q2 with full rollout by Q4.",
+    "user_id": "sponsor.jane.doe@example.com",
+    "submission_id": "demo-002",
+    "metadata": {
+        "source": "web-portal",
+        "department": "Education Technology",
+        "priority": "High"
+    }
 }
