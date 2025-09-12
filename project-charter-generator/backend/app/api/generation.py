@@ -107,16 +107,18 @@ def ask():
         logger.exception("Embedding failed")
         return jsonify({"error": "Failed to compute embedding"}), 502
 
-    # Retrieve context from Databricks
-    try:
-        docs = databricks.retrieve_context(embedding, top_k=top_k)
-    except Exception:
-        logger.exception("Databricks retrieval failed")
-        docs = []
+    # # Retrieve context from Databricks
+    # try:
+    #     docs = databricks.retrieve_context(embedding, top_k=top_k)
+    # except Exception:
+    #     logger.exception("Databricks retrieval failed")
+    #     docs = []
+    docs = []
 
     # Build prompt
     prompt = prompt_builder.build_prompt(
-        questions=questions,
+        # questions=questions,
+        questions=query_text,
         docs=docs,
         instructions="",
         scoring_summary=scoring_summary,
