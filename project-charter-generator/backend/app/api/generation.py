@@ -119,9 +119,9 @@ def ask():
     prompt = prompt_builder.build_prompt(
         # questions=questions,
         questions=query_text,
-        docs=docs,
-        instructions="",
+        # docs=docs,
         scoring_summary=scoring_summary,
+        instructions="",
     )
 
     # Generate answer with Azure OpenAI
