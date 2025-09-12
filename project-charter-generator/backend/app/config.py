@@ -59,8 +59,7 @@ class Config:
     PROMPT_TEMPLATE = """You are a project-charter generator assistant.
 
     Given:
-    1) User answers (as JSON array of question objects): {answers_json}
-    2) Context documents (as a list of short text snippets): {context_text}
+    1) Context documents: {context_text}
 
     Task:
     Produce a single valid JSON object (and ONLY the JSON object) that exactly matches this schema and nothing else:
@@ -109,9 +108,6 @@ class Config:
     Scoring summary:
     {scoring_summary}
 
-    User answers (JSON):
-    {answers_json}
-
-    Context (short snippets):
+    Context:
     {context_text}
     """
