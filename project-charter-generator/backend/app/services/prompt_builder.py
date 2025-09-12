@@ -36,7 +36,7 @@ def _truncate_text(s: str, max_chars: int) -> str:
     tail = s[- (max_chars // 2) :]
     return head + "\n\n...TRUNCATED...\n\n" + tail
 
-def build_prompt(questions: Any, docs: List[Dict], scoring_summary: Any = "", instructions: str = "") -> str:
+def build_prompt(questions: Any, docs: List[Dict] = None, scoring_summary: Any = "", instructions: str = "") -> str:
     """
     Build the final prompt expected by the LLM.
 
@@ -44,13 +44,13 @@ def build_prompt(questions: Any, docs: List[Dict], scoring_summary: Any = "", in
     - docs: list of retrieved context documents (each must contain 'text' or 'content')
     - instructions: optional extra instructions appended to the PROMPT_TEMPLATE's default
     """
-    try:
-        answers_json = json.dumps(questions or [], indent=2, ensure_ascii=False)
-    except Exception as e:
-        logger.exception(f"Failed to serialize questions to JSON: {e}")
-        answers_json = "[]"
+    # try:
+    #     answers_json = json.dumps(questions or [], indent=2, ensure_ascii=False)
+    # except Exception as e:
+    #     logger.exception(f"Failed to serialize questions to JSON: {e}")
+    #     answers_json = "[]"
 
-    context_block = build_context_block(docs or [])
+    # context_block = build_context_block(docs or [])
     # max_context = getattr(Config, "PROMPT_MAX_CONTEXT_CHARS", DEFAULT_MAX_CONTEXT_CHARS)
     # try:
     #     max_context = int(max_context)
@@ -61,8 +61,8 @@ def build_prompt(questions: Any, docs: List[Dict], scoring_summary: Any = "", in
 
     try:
         prompt = Config.PROMPT_TEMPLATE.format(
-            answers_json=answers_json,
-            context_text=context_block,
+            context_text=answers_json,
+            # context_text=context_block,
             scoring_summary=scoring_summary or "",
             instructions=instructions or ""
         )
@@ -73,10 +73,11 @@ def build_prompt(questions: Any, docs: List[Dict], scoring_summary: Any = "", in
             "You are a project-charter generator.\n\n"
             "User answers:\n"
             f"{answers_json}\n\n"
-            "Context:\n"
-            f"{context_block}\n\n"
+            "Scoring:\n"
+            f"{scoring_summary}\n\n"
             "Produce a single valid JSON object matching the schema."
         )
 
-    logger.info(f"Prompt built: context_chars={len(context_block)}, answers_chars={len(answers_json)}")
+    # logger.info(f"Prompt built: context_chars={len(context_block)}, answers_chars={len(answers_json)}")
+    logger.info(f"Prompt built: payload_chars={len(payload_json)}")
     return prompt
