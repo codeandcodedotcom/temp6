@@ -32,5 +32,10 @@ curl -X POST http://127.0.0.1:5000/api/test/test_retriever ^
   -H "Content-Type: application/json" ^
   -d "{ \"text\": \"project management best practices\" }"
 
-curl -X POST "http://127.0.0.1:5000/api/generation/ask" -H "Content-Type: application/json" --data-binary @payload.json
+curl -X POST "http://127.0.0.1:5000/api/generation/ask" -H "Content-Type: application/json" --data-binary @payload9.json
+
+curl -X POST "http://127.0.0.1:5000/api/generation/ask?format=html" -H "Content-Type: application/json" --data-binary @payload9.json
+
+curl -X POST "http://127.0.0.1:5000/api/generation/ask" -H "Content-Type: application/json" -H "Accept: text/html" --data-binary @payload9.json
+
 
