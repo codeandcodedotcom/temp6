@@ -47,67 +47,14 @@ class Config:
     ENTRA_AUTHORITY = f"https://login.microsoftonline.com/{ENTRA_TENANT_ID}/v2.0" if ENTRA_TENANT_ID else None
     ENTRA_JWKS_URL = f"https://login.microsoftonline.com/{ENTRA_TENANT_ID}/discovery/v2.0/keys" if ENTRA_TENANT_ID else None
 
+    MAX_RESULT_CHARS = int(os.getenv("MAX_RESULT_CHARS", "100000"))
+
+    # PATHS
     BASE_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
     QUESTIONNAIRE_PATH = os.path.join(BASE_DIR, "data", "questions.json")
     KPI_FILE_PATH = os.getenv("KPI_DATA_PATH", os.path.join(BASE_DIR, "data", "kpi_data.json"))
-
     DB_PATH = os.getenv("DB_PATH", os.path.join(BASE_DIR, "data", "database.db"))
+    PROMPT_TEMPLATE_PATH = os.path.join(BASE_DIR, "data", "prompt_template.txt")
+    OUTPUT_SCHEMA_PATH = os.path.join(BASE_DIR, "data", "output_template.json")
 
-    MAX_RESULT_CHARS = int(os.getenv("MAX_RESULT_CHARS", "200000"))
 
-
-    PROMPT_TEMPLATE = """You are a project-charter generator assistant.
-
-    Given:
-    1) Context documents: {context_text}
-
-    Task:
-    Produce a single valid JSON object (and ONLY the JSON object) that exactly matches this schema and nothing else:
-
-    {
-    "project_title": "string",
-    "domain": "string",
-    "project_description": "string",
-    "objectives": ["string", "..."],
-    "project_scope": "string",
-    "timeline": [
-        {
-        "phase": "string",
-        "duration": "string",
-        "tasks": ["string", "..."]
-        }
-    ],
-    "budget": {
-        "total_budget": "string or number",
-        "currency": "string (optional)",
-        "breakdown": [
-        {"category": "string", "percentage": number}
-        ]
-    },
-    "risks": [
-        {"title":"string","impact":"Low|Medium|High","mitigation":"string"}
-    ],
-    "team": {
-        {"role":"string","count": integer, "responsibilities": ["string", "..."]}
-    },
-    "recommended_pm_count": integer,
-    "success_criteria": ["string", "..."],
-    "resources_required": ["string", "..."],
-    "tools_and_technologies": ["string", "..."],
-    "recommendation": "string",
-    "rationale": "string (explain briefly how score was derived)"
-    }
-
-    Instructions:
-    - Use the user answers and context documents to populate the fields.
-    - Use the scoring summary below to guide complexity-sensitive recommendations.
-    - If a particular field cannot be inferred, use a sensible default (empty string, empty array, or 0 for numbers).
-    - Do NOT include any text before or after the JSON. Respond with EXACTLY one JSON object matching the schema above.
-    - Ensure date fields (if present) use ISO format YYYY-MM-DD.
-
-    Scoring summary:
-    {scoring_summary}
-
-    Context:
-    {context_text}
-    """
