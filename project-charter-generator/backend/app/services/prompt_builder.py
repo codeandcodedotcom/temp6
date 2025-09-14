@@ -1,83 +1,53 @@
 import json
-from typing import List, Dict, Any
+import os
+from typing import Any, Dict
 from app.config import Config
 from app.utils.logger import get_logger
 
 logger = get_logger(__name__)
 
-# Default max context length used to truncate context_text if very large
-DEFAULT_MAX_CONTEXT_CHARS = 8000
-
-def build_context_block(docs: List[Dict]) -> str:
+def build_prompt(payload: Dict[str, Any], scoring_summary: str) -> str:
     """
-    Join retrieved docs into a single context block.
-    Each doc is expected to have either 'content' or 'text'.
+    Build prompt string by loading the single-file template and filling placeholders:
+      {frontend_json}, {scoring_summary}, {output_schema}
     """
-    parts = []
-    for i, d in enumerate(docs, start=1):
-        text = d.get("content") or d.get("text") or ""
-        if not text:
-            logger.warning(f"Document {i} missing 'content'/'text' field")
-            continue
-        source = d.get("source")
-        doc_id = d.get("doc_id") or d.get("id")
-        header = f"[{source}::{doc_id}]" if source or doc_id else f"[doc:{i}]"
-        parts.append(f"{header} {text}".strip())
-    ctx = "\n\n".join(parts)
-    logger.info(f"Built context block with {len(parts)} segments (chars={len(ctx)})")
-    return ctx
-
-def _truncate_text(s: str, max_chars: int) -> str:
-    if len(s) <= max_chars:
-        return s
-    logger.info(f"Truncating context from {len(s)} to {max_chars} chars")
-    # keep head and tail for context variety
-    head = s[: max_chars // 2]
-    tail = s[- (max_chars // 2) :]
-    return head + "\n\n...TRUNCATED...\n\n" + tail
-
-def build_prompt(questions: Any, docs: List[Dict] = None, scoring_summary: Any = "", instructions: str = "") -> str:
-    """
-    Build the final prompt expected by the LLM.
-
-    - questions: list of question objects received from frontend (will be serialized to JSON)
-    - docs: list of retrieved context documents (each must contain 'text' or 'content')
-    - instructions: optional extra instructions appended to the PROMPT_TEMPLATE's default
-    """
-    # try:
-    #     answers_json = json.dumps(questions or [], indent=2, ensure_ascii=False)
-    # except Exception as e:
-    #     logger.exception(f"Failed to serialize questions to JSON: {e}")
-    #     answers_json = "[]"
-
-    # context_block = build_context_block(docs or [])
-    # max_context = getattr(Config, "PROMPT_MAX_CONTEXT_CHARS", DEFAULT_MAX_CONTEXT_CHARS)
-    # try:
-    #     max_context = int(max_context)
-    # except Exception:
-    #     max_context = DEFAULT_MAX_CONTEXT_CHARS
-
-    # context_text = _truncate_text(context_block, max_context)
-
+    # serialize frontend payload
     try:
-        prompt = Config.PROMPT_TEMPLATE.format(
-            context_text=answers_json,
-            # context_text=context_block,
+        frontend_json = json.dumps(payload or {}, indent=2, ensure_ascii=False)
+    except Exception:
+        frontend_json = str(payload or {})
+
+    # load output schema
+    output_schema_text = "{}"
+    try:
+        with open(Config.OUTPUT_SCHEMA_PATH, "r", encoding="utf-8") as fh:
+            output_schema_text = fh.read()
+    except Exception as e:
+        logger.exception("Failed to read OUTPUT_SCHEMA_PATH=%s: %s", Config.OUTPUT_SCHEMA_PATH, e)
+
+    # load prompt template file
+    try:
+        with open(Config.PROMPT_TEMPLATE_PATH, "r", encoding="utf-8") as fh:
+            template = fh.read()
+    except Exception as e:
+        logger.exception("Failed to read PROMPT_TEMPLATE_PATH=%s: %s", Config.PROMPT_TEMPLATE_PATH, e)
+        # fallback minimal template to avoid breaking
+        template = (
+            "USER INPUT:\n{frontend_json}\n\nSCORING SUMMARY:\n{scoring_summary}\n\nOUTPUT SCHEMA:\n{output_schema}\n\n"
+            "Return exactly one JSON object (no commentary)."
+        )
+
+    # format template
+    try:
+        prompt = template.format(
+            frontend_json=frontend_json,
             scoring_summary=scoring_summary or "",
-            instructions=instructions or ""
+            output_schema=output_schema_text
         )
     except KeyError as e:
-        logger.exception(f"PROMPT_TEMPLATE missing expected placeholder: {e}")
-        # Fallback: build a minimal prompt
-        prompt = (
-            "You are a project-charter generator.\n\n"
-            "User answers:\n"
-            f"{answers_json}\n\n"
-            "Scoring:\n"
-            f"{scoring_summary}\n\n"
-            "Produce a single valid JSON object matching the schema."
-        )
+        logger.exception("Prompt template missing placeholder: %s", e)
+        # safe fallback
+        prompt = f"USER INPUT:\n{frontend_json}\n\nSCORING SUMMARY:\n{scoring_summary}\n\nOUTPUT SCHEMA:\n{output_schema_text}"
 
-    # logger.info(f"Prompt built: context_chars={len(context_block)}, answers_chars={len(answers_json)}")
-    logger.info(f"Prompt built: payload_chars={len(payload_json)}")
+    logger.info("Built prompt (chars=%d)", len(prompt))
     return prompt
