@@ -1,0 +1,33 @@
+{
+    "project_title": "Intranet Revamp",
+    "domain": "IT",
+    "budget_range": "Under $20K",
+    "timeline": "4 months",
+    "project_description": "Upgrade internal intranet with a modern UI and basic document management features.",
+    "questions": [
+        {
+            "id": "q1",
+            "text": "Approved budget?",
+            "answer": "Yes",
+            "score": 5
+        },
+        {
+            "id": "q2",
+            "text": "Vendor involvement?",
+            "answer": "No",
+            "score": 3
+        },
+        {
+            "id": "q3",
+            "text": "Cross-department?",
+            "answer": "No",
+            "score": 4
+        },
+        {
+            "id": "q4",
+            "text": "Strategic importance?",
+            "answer": "Low",
+            "score": 8
+        }
+    ]
+}

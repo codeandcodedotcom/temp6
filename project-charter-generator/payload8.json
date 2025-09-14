@@ -1,0 +1,39 @@
+{
+    "project_title": "ERP Modernization",
+    "domain": "Manufacturing",
+    "budget_range": "500k-1M",
+    "timeline": "12 months",
+    "project_description": "Replace legacy ERP with a modern cloud-based solution across all plants with real-time reporting.",
+    "questions": [
+        {
+            "id": "q1",
+            "text": "Approved budget?",
+            "answer": "Yes",
+            "score": 10
+        },
+        {
+            "id": "q2",
+            "text": "Cross-department?",
+            "answer": "Yes",
+            "score": 9
+        },
+        {
+            "id": "q3",
+            "text": "External vendor?",
+            "answer": "Yes",
+            "score": 8
+        },
+        {
+            "id": "q4",
+            "text": "Strategic importance?",
+            "answer": "High",
+            "score": 9
+        },
+        {
+            "id": "q5",
+            "text": "Infrastructure/tools needed?",
+            "answer": "Yes",
+            "score": 9
+        }
+    ]
+}

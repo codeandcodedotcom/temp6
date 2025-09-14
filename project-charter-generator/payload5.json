@@ -1,0 +1,45 @@
+{
+    "project_title": "AI-powered Healthcare Assistant",
+    "domain": "Healthcare",
+    "budget_range": "Above $1M",
+    "timeline": "18-24 months",
+    "project_description": "Develop an AI assistant for hospitals that integrates patient data, predicts risk scores, and automates scheduling while ensuring compliance with data privacy regulations.",
+    "questions": [
+        {
+            "id": "q1",
+            "text": "Is there an approved budget?",
+            "answer": "Yes",
+            "score": 5
+        },
+        {
+            "id": "q2",
+            "text": "Does the project involve sensitive data handling?",
+            "answer": "Yes",
+            "score": 8
+        },
+        {
+            "id": "q3",
+            "text": "Is cross-departmental collaboration required?",
+            "answer": "Yes",
+            "score": 7
+        },
+        {
+            "id": "q4",
+            "text": "Is external vendor involvement necessary?",
+            "answer": "Yes",
+            "score": 6
+        },
+        {
+            "id": "q5",
+            "text": "Will new infrastructure or tools need to be procured?",
+            "answer": "Yes",
+            "score": 6
+        },
+        {
+            "id": "q6",
+            "text": "Is the project expected to have strategic impact?",
+            "answer": "Yes",
+            "score": 7
+        }
+    ]
+}

@@ -1,0 +1,39 @@
+{
+    "project_title": "Smart City IoT Platform",
+    "domain": "Government",
+    "budget_range": "Above $5M",
+    "timeline": "24+ months",
+    "project_description": "Deploy a city-wide IoT platform for traffic, utilities, safety, and citizen services with AI-driven analytics.",
+    "questions": [
+        {
+            "id": "q1",
+            "text": "Approved budget?",
+            "answer": "Yes",
+            "score": 12
+        },
+        {
+            "id": "q2",
+            "text": "Cross-department?",
+            "answer": "Yes",
+            "score": 11
+        },
+        {
+            "id": "q3",
+            "text": "External vendor?",
+            "answer": "Yes",
+            "score": 11
+        },
+        {
+            "id": "q4",
+            "text": "Strategic importance?",
+            "answer": "Very High",
+            "score": 11
+        },
+        {
+            "id": "q5",
+            "text": "Data sensitivity?",
+            "answer": "Critical",
+            "score": 10
+        }
+    ]
+}
