@@ -42,3 +42,13 @@ def user_activity():
     except Exception:
         logger.exception("Failed to fetch user activity")
         return jsonify({"error": "Failed to fetch users activity"}), 500
+
+
+@bp.route("/kpi/charters-per-month", methods=["GET"])
+def charters_per_month():
+    try:
+        data = kpi_view.get_charters_per_month()
+        return jsonify(data), 200
+    except Exception:
+        logger.exception("Failed to fetch charters per month")
+        return jsonify({"error": "Failed to fetch charters per month"}), 500
