@@ -74,3 +74,14 @@ def get_user_activity(limit: int = 10) -> List[Dict]:
     except Exception:
         limit = 10
     return [dict(i) for i in arr[: max(0, limit) ]]
+
+
+def get_charters_per_month() -> List[Dict]:
+    """
+    Return the list of {month, chartersCreated} entries from KPI file.
+    """
+    data = _get_data()
+    arr = data.get("charters_per_month", [])
+    if not isinstance(arr, list):
+        return []
+    return [dict(i) for i in arr]
