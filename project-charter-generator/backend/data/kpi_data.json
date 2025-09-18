@@ -180,5 +180,43 @@
             "lastLogin": "2025-09-08",
             "totalLogins": 29
         }
+    ],
+    "charters_per_month": [
+        {
+            "month": "January",
+            "chartersCreated": 17
+        },
+        {
+            "month": "February",
+            "chartersCreated": 13
+        },
+        {
+            "month": "March",
+            "chartersCreated": 20
+        },
+        {
+            "month": "April",
+            "chartersCreated": 11
+        },
+        {
+            "month": "May",
+            "chartersCreated": 16
+        },
+        {
+            "month": "June",
+            "chartersCreated": 10
+        },
+        {
+            "month": "July",
+            "chartersCreated": 12
+        },
+        {
+            "month": "August",
+            "chartersCreated": 8
+        },
+        {
+            "month": "September",
+            "chartersCreated": 15
+        }
     ]
 }
