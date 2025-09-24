@@ -57,4 +57,12 @@ class Config:
     PROMPT_TEMPLATE_PATH = os.path.join(BASE_DIR, "data", "prompt_template.txt")
     OUTPUT_SCHEMA_PATH = os.path.join(BASE_DIR, "data", "output_template.json")
 
+    # Error logging
+    ERROR_LOG_FALLBACK_FILE = os.getenv("ERROR_LOG_FALLBACK_FILE")
+    USE_DB_FOR_ERRORS = os.getenv("USE_DB_FOR_ERRORS", "False").lower() in ("true", "1", "yes")
+
+    # Database
+    DATABASE_URL = os.getenv("DATABASE_URL")
+
+
 
