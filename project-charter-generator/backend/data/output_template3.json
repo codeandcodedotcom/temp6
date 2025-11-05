@@ -66,7 +66,11 @@
     "timeline": {
         "project_initiation_and_planning": {
             "duration": "4-6 weeks",
-            "prerequisites": "Sponsor alignment; core team availability; access to sample content",
+            "prerequisites": [
+                "Sponsor alignment",
+                "Core team availability",
+                "Access to sample content"
+            ],
             "tasks": [
                 "Project charter approval",
                 "Stakeholder analysis",
@@ -76,7 +80,10 @@
         },
         "design_and_architecture": {
             "duration": "6-8 weeks",
-            "prerequisites": "Confirmed scope and non-functional requirements; design standards",
+            "prerequisites": [
+                "Confirmed scope and non-functional requirements",
+                "Design standards finalized"
+            ],
             "tasks": [
                 "System architecture design",
                 "UI/UX mockups and prototypes",
@@ -86,7 +93,10 @@
         },
         "development_and_implementation": {
             "duration": "10-12 weeks",
-            "prerequisites": "Dev environment, repositories, CI/CD pipeline",
+            "prerequisites": [
+                "Development environment ready",
+                "Repositories and CI/CD pipeline configured"
+            ],
             "tasks": [
                 "Core functionality development",
                 "Integration implementation",
@@ -96,7 +106,11 @@
         },
         "testing_and_quality_assurance": {
             "duration": "6-8 weeks",
-            "prerequisites": "Test environments, test data, acceptance criteria",
+            "prerequisites": [
+                "Test environments ready",
+                "Test data prepared",
+                "Acceptance criteria finalized"
+            ],
             "tasks": [
                 "Unit and integration testing",
                 "User acceptance testing",
@@ -106,7 +120,11 @@
         },
         "deployment_and_uat": {
             "duration": "2 weeks",
-            "prerequisites": "Staging environment ready; UAT test cases; rollback plan",
+            "prerequisites": [
+                "Staging environment ready",
+                "UAT test cases prepared",
+                "Rollback plan in place"
+            ],
             "tasks": [
                 "Deploy to staging",
                 "Run UAT with pilot users",
@@ -115,7 +133,10 @@
         },
         "production_deployment": {
             "duration": "1 week",
-            "prerequisites": "Change approval; monitoring and alerting configured",
+            "prerequisites": [
+                "Change approval obtained",
+                "Monitoring and alerting configured"
+            ],
             "tasks": [
                 "Production release and smoke tests",
                 "Enable KPI dashboards",
@@ -124,7 +145,10 @@
         },
         "project_closure": {
             "duration": "1 week",
-            "prerequisites": "All acceptance criteria met; training and documentation completed",
+            "prerequisites": [
+                "All acceptance criteria met",
+                "Training and documentation completed"
+            ],
             "tasks": [
                 "Operational handover",
                 "Post-implementation review",
