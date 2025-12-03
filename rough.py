@@ -1,113 +1,82 @@
-# src/app/db/services/add_options_data.py
+#!/usr/bin/env python3
 """
-Script to add question option rows into the DB.
+Normalize and add required fields to src/data/questions.json.
 
-Expectations:
-- A function `prepare_options()` will be available in `src.data.prepare_data`
-  that returns a list of option dicts with keys:
-    - option_id
-    - question_id
-    - option_key
-    - option_text
-    - option_score
-    - order_index
+What it does (clean / no backups):
+- Ensures each question has: question_id, question_text, question_type, order_index
+- Ensures each option has: option_id, option_key, option_text, option_score, order_index
+- Preserves existing fields (doesn't remove original keys like "id" / "text" / "label")
+- Writes the file back with pretty JSON
 
-Usage:
-- Run from project root:
-    python -m src.app.db.services.add_options_data
+Run from repository root:
+    python src/scripts/normalize_questions.py
 """
-
-import asyncio
+from pathlib import Path
 import json
-import logging
-from typing import List, Dict, Any, Iterable
+import uuid
+import sys
 
-from fastapi import HTTPException
-from sqlalchemy.exc import SQLAlchemyError
+SRC = Path("src/data/questions.json")
+if not SRC.exists():
+    print(f"ERROR: {SRC} not found", file=sys.stderr)
+    sys.exit(1)
 
-# Adjust these imports if your working import path differs.
-from src.app.db.session_new import AsyncSessionLocal
-from src.app.schemas.question_option import QuestionOption  # SQLAlchemy model
+data = json.loads(SRC.read_text(encoding="utf-8"))
+questions = data.get("questions")
+if not isinstance(questions, list):
+    print("ERROR: top-level 'questions' array not found or invalid", file=sys.stderr)
+    sys.exit(1)
 
-logger = logging.getLogger(__name__)
-logging.basicConfig(level=logging.INFO)
+for q_index, q in enumerate(questions):
+    # question_id
+    if not q.get("question_id"):
+        q["question_id"] = str(uuid.uuid4())
 
+    # question_text <- prefer existing normalized key, else copy from "text"
+    if not q.get("question_text") and q.get("text"):
+        q["question_text"] = q["text"]
 
-async def add_question_options(options_input: Iterable[Dict[str, Any]]):
-    """
-    Insert a list of option dicts into DB.
+    # question_type <- prefer existing normalized key, else copy from "type"
+    if not q.get("question_type") and q.get("type"):
+        q["question_type"] = q["type"]
 
-    options_input may be:
-      - a Python list of dicts (preferred)
-      - or a JSON string representing that list
+    # order_index <- keep if exists; else numeric id if present; else use list index+1
+    if not q.get("order_index"):
+        if isinstance(q.get("id"), int):
+            q["order_index"] = q["id"]
+        else:
+            q["order_index"] = q_index + 1
 
-    Each dict must contain keys matching the QuestionOption model.
-    """
-    # If input is a JSON string, parse it
-    if isinstance(options_input, str):
-        try:
-            options_data = json.loads(options_input)
-        except Exception as e:
-            logger.error("Failed to parse JSON input for options: %s", e)
-            raise HTTPException(status_code=400, detail="Invalid JSON input for options")
-    else:
-        options_data = list(options_input)
+    # normalize options list
+    opts = q.get("options")
+    if opts is None:
+        q["options"] = []
+        opts = q["options"]
 
-    if not isinstance(options_data, list):
-        logger.error("Options input must be a list of objects.")
-        raise HTTPException(status_code=400, detail="Options input must be a list")
+    for o_index, opt in enumerate(opts):
+        # option_id
+        if not opt.get("option_id"):
+            opt["option_id"] = str(uuid.uuid4())
 
-    async with AsyncSessionLocal() as session:
-        added_options = []
-        try:
-            for o in options_data:
-                # Create model instance - ensure keys match your model definitions.
-                option = QuestionOption(
-                    option_id=o.get("option_id"),
-                    question_id=o.get("question_id"),
-                    option_key=o.get("option_key"),
-                    option_text=o.get("option_text"),
-                    option_score=o.get("option_score"),
-                    order_index=o.get("order_index"),
-                )
-                session.add(option)
-                added_options.append(option)
+        # option_key (source doesn't have it) - keep existing or set "NA"
+        if not opt.get("option_key"):
+            opt["option_key"] = "NA"
 
-            # commit all inserts at once
-            await session.commit()
+        # option_text <- prefer existing normalized key, else copy from "label"
+        if not opt.get("option_text") and opt.get("label"):
+            opt["option_text"] = opt["label"]
 
-            # refresh to fetch DB-populated fields (timestamps/defaults)
-            for opt in added_options:
-                try:
-                    await session.refresh(opt)
-                except Exception:
-                    # non-fatal: continue but log
-                    logger.debug("Could not refresh option: %s", getattr(opt, "option_id", None))
+        # option_score <- map from 'score' if present; otherwise keep existing or set null
+        if "option_score" not in opt:
+            if "score" in opt:
+                opt["option_score"] = opt["score"]
+            else:
+                opt["option_score"] = None
 
-            logger.info("Inserted %d option(s) successfully.", len(added_options))
-            return added_options
+        # order_index for option
+        if not opt.get("order_index"):
+            opt["order_index"] = o_index + 1
 
-        except SQLAlchemyError as e:
-            await session.rollback()
-            logger.exception("Database error while inserting options: %s", e)
-            raise HTTPException(status_code=500, detail="Database error while inserting options")
-        except Exception as e:
-            await session.rollback()
-            logger.exception("Unexpected error while inserting options: %s", e)
-            raise HTTPException(status_code=500, detail="Unexpected server error")
-
-
-if __name__ == "__main__":
-    # This will call prepare_options() in src.data.prepare_data.
-    # Implement prepare_options() there to return the required list.
-    try:
-        from src.data.prepare_data import prepare_options  # user will implement
-    except Exception as e:
-        logger.error("Could not import prepare_options(): %s", e)
-        raise
-
-    prepared = prepare_options()
-    logger.info("Prepared %d option(s) to insert.", len(prepared) if prepared else 0)
-
-    # Run insertion
-    asyncio.run(add_question_options(prepared))
+# write back (pretty)
+SRC.write_text(json.dumps(data, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
+print(f"Wrote normalized data to {SRC}")
