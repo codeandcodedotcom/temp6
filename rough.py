@@ -1,65 +1,137 @@
-from typing import Any, Dict, List
+from pydantic import BaseModel, EmailStr, constr
+from typing import Optional
+from uuid import UUID
+from datetime import datetime
 
-def get_pm_profiles_for_score(total_score: int, project_type: str) -> List[Dict[str, Any]]:
+class UserCreate(BaseModel):
+    user_name: constr(strip_whitespace=True, min_length=1)
+    email: EmailStr
+    department: Optional[str] = None
+    role: Optional[str] = None
+
+
+class UserResponse(BaseModel):
+    user_id: UUID
+    user_name: str
+    email: EmailStr
+    department: Optional[str]
+    role: Optional[str]
+    created_at: datetime
+    updated_at: datetime
+
+    class Config:
+        orm_mode = True
+
+
+________
+
+
+from uuid import uuid4
+from datetime import datetime
+from typing import Optional
+
+from sqlalchemy import select
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from app.db.models import User  # your SQLAlchemy model
+from app.models.pydantic_models import UserCreate
+from app.utils.logger import get_logger
+
+logger = get_logger(__name__)
+
+
+async def get_user_by_email(
+    session: AsyncSession, email: str
+) -> Optional[User]:
+    stmt = select(User).where(User.email == email)
+    result = await session.execute(stmt)
+    return result.scalars().first()
+
+
+async def create_or_update_user(
+    session: AsyncSession, payload: UserCreate
+) -> User:
     """
-    Based on total_score and project_type (Q3 answer), return a list of
-    job-profile dicts for the PM / Resource Recommendation section.
-
-    - 1–27  -> no roles
-    - 28–39 -> Project Lead (or IT Project Lead for IT Program Management)
-    - 40–51 -> Project Manager
-    - 52–60 -> multiple roles, dependent on project_type
+    Simple upsert-by-email:
+    - if user with this email exists -> update name/department/role
+    - else -> create new user
     """
-    role_names: List[str] = []
+    existing = await get_user_by_email(session, payload.email)
 
-    # ---- Find matching score band ----
-    for band in _PM_BANDS:
-        try:
-            min_s = int(band.get("min_score", 0))
-            max_s = int(band.get("max_score", 0))
-        except Exception:
-            continue
+    now = datetime.utcnow()
 
-        if min_s <= total_score <= max_s:
-            roles_spec = band.get("roles")
+    if existing:
+        logger.info("Updating existing user with email=%s", payload.email)
+        existing.user_name = payload.user_name
+        existing.department = payload.department
+        existing.role = payload.role
+        existing.updated_at = now
+        await session.flush()
+        return existing
 
-            # Case 1: old style: simple list of roles
-            if isinstance(roles_spec, list):
-                role_names = roles_spec or []
+    logger.info("Creating new user with email=%s", payload.email)
 
-            # Case 2: new style: dict keyed by project_type / 'default'
-            elif isinstance(roles_spec, dict):
-                # exact match on project_type (Q3 answer, e.g. "IT Program Management")
-                if project_type in roles_spec:
-                    role_names = roles_spec[project_type] or []
-                # fall back to 'default' if present (e.g. 28–39 band -> Project Lead)
-                elif "default" in roles_spec:
-                    role_names = roles_spec["default"] or []
-                else:
-                    # last-resort: flatten all role lists
-                    all_roles = set()
-                    for vals in roles_spec.values():
-                        all_roles.update(vals or [])
-                    role_names = list(all_roles)
+    user = User(
+        user_id=uuid4(),
+        user_name=payload.user_name,
+        email=payload.email,
+        department=payload.department,
+        role=payload.role,
+        created_at=now,
+        updated_at=now,
+    )
+    session.add(user)
+    await session.flush()
+    return user
 
-            else:
-                role_names = []
 
-            break
-    else:
-        # no band matched
-        return []
+-------
 
-    # self-managed / no-role case
-    if not role_names:
-        return []
 
-    # ---- Map role names to full job_profile blocks ----
-    results: List[Dict[str, Any]] = []
-    for rn in role_names:
-        for prof in _JOB_PROFILES:
-            if prof.get("job_profile") == rn:
-                results.append(prof)
-                break  # stop after first match
+from fastapi import APIRouter, Depends, HTTPException, status
+from sqlalchemy.ext.asyncio import AsyncSession
 
-    return results
+from app.db.session_new import get_db_session
+from app.models.pydantic_models import UserCreate, UserResponse
+from app.services.user_service import create_or_update_user, get_user_by_email
+from app.utils.logger import get_logger
+
+router = APIRouter()
+logger = get_logger(__name__)
+
+
+@router.post("/users", response_model=UserResponse, status_code=status.HTTP_201_CREATED)
+async def create_user(
+    payload: UserCreate,
+    session: AsyncSession = Depends(get_db_session),
+) -> UserResponse:
+    try:
+        async with session.begin():
+            user = await create_or_update_user(session, payload)
+        return user
+    except Exception as e:
+        logger.exception("Failed to create/update user: %s", e)
+        raise HTTPException(
+            status_code=500,
+            detail="Failed to create or update user",
+        )
+
+
+@router.get("/users/by-email/{email}", response_model=UserResponse)
+async def get_user(
+    email: str,
+    session: AsyncSession = Depends(get_db_session),
+) -> UserResponse:
+    user = await get_user_by_email(session, email)
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+    return user
+
+
+
+-------
+
+
+from app.api import users
+
+app.include_router(users.router, prefix="/api")
