@@ -1,54 +1,33 @@
-# app/services/project_service.py
+from typing import List, Dict
 
-from __future__ import annotations
-
-from typing import Optional
-from uuid import UUID
-
-from sqlalchemy.ext.asyncio import AsyncSession
-
-from app.db.models import Project
-from app.models.pydantic_models import ProjectCharter
-from app.utils.logger import get_logger
-
-logger = get_logger(__name__)
-
-
-async def create_project_record(
-    session: AsyncSession,
-    *,
-    user_id: UUID,
-    charter: ProjectCharter,
-    department: Optional[str] = None,
-) -> Project:
+def _get_managed_by(total_score: int, pm_profiles: List[Dict[str, Any]]) -> str:
     """
-    Create one row in `projects` table from a validated ProjectCharter.
-    Assumes we're already inside `async with session.begin():`.
+    Decide the 'managed_by' label for the project.
+
+    - Bands (by total_score):
+        1–27  -> Self managed
+        28–39 -> Project Lead
+        40–51 -> Project Manager
+        52+   -> Team of PM professionals
+    - For non-last bands, use the job_profile from pm_profiles if available.
     """
 
-    logger.info(
-        "Creating project %s for user %s (score=%s)",
-        charter.project_id,
-        user_id,
-        charter.complexity_score,
-    )
+    # Last band: score >= 52  -> always "Team of PM professionals"
+    if total_score >= 52:
+        return "Team of PM professionals"
 
-    project = Project(
-        project_id=charter.project_id,
-        user_id=user_id,
-        project_title=charter.project_name,
-        department=department or "",
-        budget=charter.budget,
-        sponsor=charter.project_sponsor,
-        description=charter.description,
-        # Pydantic has already ensured types; cast in case your model keeps score as str
-        complexity_score=int(charter.complexity_score),
-        managed_by=charter.managed_by,     # we’ll add this in step 2
-        created_at=charter.created_at,
-    )
+    # Other bands: try to use job_profile from pm_profiles[0]
+    if pm_profiles:
+        jp = (pm_profiles[0].get("job_profile") or "").strip()
+        if jp:
+            return jp
 
-    session.add(project)
-    await session.flush()
-
-    logger.info("Project %s created for user %s", charter.project_id, user_id)
-    return project
+    # Fallback purely from score (in case pm_profiles is empty or malformed)
+    if total_score <= 27:
+        return "Self managed"
+    elif total_score <= 39:
+        return "Project Lead"
+    elif total_score <= 51:
+        return "Project Manager"
+    else:
+        return "Team of PM professionals"
