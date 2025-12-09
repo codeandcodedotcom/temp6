@@ -1,47 +1,8 @@
-from typing import List
-from fastapi import APIRouter, HTTPException, Depends
-from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.services import kpi_service
-from app.db.session_new import get_db_session
-from app.utils.logger import get_logger
-from app.models.pydantic_models import MonthlyCharter
-
-router = APIRouter()
-logger = get_logger(__name__)
-
-@router.get("/kpi/charters-per-month", response_model=List[MonthlyCharter])
-async def charters_per_month(
-    session: AsyncSession = Depends(get_db_session),
-) -> List[MonthlyCharter]:
-    """
-    Returns total charter counts per month split by PM band.
-    """
-    try:
-        data = await kpi_service.get_charters_per_month(session=session)
-        logger.info("KPI: generated charters-per-month summary (%d months)", len(data))
-        return data
-    except Exception:
-        logger.exception("Failed to fetch charters per month")
-        raise HTTPException(
-            status_code=500,
-            detail="Failed to fetch charters per month",
-        )
-
------
-
-import calendar
-from datetime import datetime
-from typing import List, Dict, Any
-
-from sqlalchemy import select, func, case
-from sqlalchemy.ext.asyncio import AsyncSession
-
-from app.schemas.project import Project
 
 async def get_charters_per_month(session: AsyncSession) -> List[Dict[str, Any]]:
     """
-    Return list of rows:
+    Return list of rows like:
     {
         "month": "January",
         "self_managed": 15,
@@ -51,30 +12,56 @@ async def get_charters_per_month(session: AsyncSession) -> List[Dict[str, Any]]:
     }
     computed from the projects table.
     """
+
+    # Truncate created_at to month for grouping
     month_expr = func.date_trunc("month", Project.created_at).label("month")
+
+    # Normalise managed_by text once (lowercase + trim)
+    managed_norm = func.trim(func.lower(Project.managed_by))
 
     stmt = (
         select(
             month_expr,
+            # Self managed
             func.sum(
-                case((Project.managed_by == "Self Managed", 1), else_=0)
+                case(
+                    (managed_norm.like("self managed%"), 1),
+                    else_=0,
+                )
             ).label("self_managed"),
+            # Project lead
             func.sum(
-                case((Project.managed_by == "Project Lead", 1), else_=0)
+                case(
+                    (managed_norm.like("project lead%"), 1),
+                    else_=0,
+                )
             ).label("project_lead"),
+            # Project manager
             func.sum(
-                case((Project.managed_by == "Project Manager", 1), else_=0)
+                case(
+                    (managed_norm.like("project manager%"), 1),
+                    else_=0,
+                )
             ).label("project_manager"),
+            # Team of PM professionals
             func.sum(
-                case((Project.managed_by == "Team of PM professionals", 1), else_=0)
+                case(
+                    (managed_norm.like("team of pm%"), 1),
+                    else_=0,
+                )
             ).label("team_of_PM_professionals"),
         )
+        .where(Project.created_at.isnot(None))
         .group_by(month_expr)
         .order_by(month_expr)
     )
 
     result = await session.execute(stmt)
     rows = result.all()
+
+    if not rows:
+        logger.info("KPI: no data for charters-per-month")
+        return []
 
     data: List[Dict[str, Any]] = []
     for row in rows:
@@ -91,4 +78,5 @@ async def get_charters_per_month(session: AsyncSession) -> List[Dict[str, Any]]:
             }
         )
 
+    logger.info("KPI: generated charters-per-month summary (%d months)", len(data))
     return data
