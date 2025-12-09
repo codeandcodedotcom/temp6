@@ -1,82 +1,109 @@
-
-
-async def get_charters_per_month(session: AsyncSession) -> List[Dict[str, Any]]:
+# ----- Helper: month -> fiscal quarter -----
+def _get_quarter(month: int) -> str:
     """
-    Return list of rows like:
-    {
-        "month": "January",
-        "self_managed": 15,
-        "project_lead": 7,
-        "project_manager": 5,
-        "team_of_PM_professionals": 28,
-    }
-    computed from the projects table.
+    Map a calendar month (1-12) to *fiscal* quarters:
+    Q1: Apr-Jun, Q2: Jul-Sep, Q3: Oct-Dec, Q4: Jan-Mar.
     """
+    if month in (4, 5, 6):
+        return "Quarter 1"
+    if month in (7, 8, 9):
+        return "Quarter 2"
+    if month in (10, 11, 12):
+        return "Quarter 3"
+    # Jan, Feb, Mar
+    return "Quarter 4"
 
-    # Truncate created_at to month for grouping
-    month_expr = func.date_trunc("month", Project.created_at).label("month")
 
-    # Normalise managed_by text once (lowercase + trim)
-    managed_norm = func.trim(func.lower(Project.managed_by))
+async def get_department_charters(session: AsyncSession) -> List[Dict[str, Any]]:
+    """
+    Charter counts per department per fiscal quarter,
+    broken down by PM band.
+    """
+    logger.info("Fetching department charter counts from projects table...")
 
     stmt = (
         select(
-            month_expr,
-            # Self managed
-            func.sum(
-                case(
-                    (managed_norm.like("self managed%"), 1),
-                    else_=0,
-                )
-            ).label("self_managed"),
-            # Project lead
-            func.sum(
-                case(
-                    (managed_norm.like("project lead%"), 1),
-                    else_=0,
-                )
-            ).label("project_lead"),
-            # Project manager
-            func.sum(
-                case(
-                    (managed_norm.like("project manager%"), 1),
-                    else_=0,
-                )
-            ).label("project_manager"),
-            # Team of PM professionals
-            func.sum(
-                case(
-                    (managed_norm.like("team of pm%"), 1),
-                    else_=0,
-                )
-            ).label("team_of_PM_professionals"),
+            Project.department,
+            Project.managed_by,
+            extract("month", Project.created_at).label("month"),
         )
-        .where(Project.created_at.isnot(None))
-        .group_by(month_expr)
-        .order_by(month_expr)
+        .where(
+            Project.department.isnot(None),
+            Project.created_at.isnot(None),
+            Project.managed_by.isnot(None),
+        )
     )
 
     result = await session.execute(stmt)
     rows = result.all()
 
-    if not rows:
-        logger.info("KPI: no data for charters-per-month")
-        return []
+    # data[dept][quarter_label] = { band -> count }
+    data: Dict[str, Dict[str, Dict[str, int]]] = {}
 
-    data: List[Dict[str, Any]] = []
-    for row in rows:
-        month_dt: datetime = row.month
-        month_name = calendar.month_name[month_dt.month]
+    for dept, managed_by, month in rows:
+        if dept is None or month is None:
+            continue
 
-        data.append(
-            {
-                "month": month_name,
-                "self_managed": row.self_managed or 0,
-                "project_lead": row.project_lead or 0,
-                "project_manager": row.project_manager or 0,
-                "team_of_PM_professionals": row.team_of_PM_professionals or 0,
+        # Initialise quarters for this department once
+        if dept not in data:
+            data[dept] = {
+                "Quarter 1": {
+                    "self_managed": 0,
+                    "team_lead": 0,
+                    "project_manager": 0,
+                    "team_of_PM_professionals": 0,
+                },
+                "Quarter 2": {
+                    "self_managed": 0,
+                    "team_lead": 0,
+                    "project_manager": 0,
+                    "team_of_PM_professionals": 0,
+                },
+                "Quarter 3": {
+                    "self_managed": 0,
+                    "team_lead": 0,
+                    "project_manager": 0,
+                    "team_of_PM_professionals": 0,
+                },
+                "Quarter 4": {
+                    "self_managed": 0,
+                    "team_lead": 0,
+                    "project_manager": 0,
+                    "team_of_PM_professionals": 0,
+                },
             }
-        )
 
-    logger.info("KPI: generated charters-per-month summary (%d months)", len(data))
-    return data
+        quarter = _get_quarter(int(month))
+
+        # Normalise managed_by text
+        raw = (managed_by or "").strip().lower()
+        band_key: str | None = None
+
+        if raw.startswith("self"):
+            band_key = "self_managed"
+        elif raw.startswith("project lead"):
+            band_key = "team_lead"
+        elif raw.startswith("project manager"):
+            band_key = "project_manager"
+        elif raw.startswith("team of pm"):
+            band_key = "team_of_PM_professionals"
+        else:
+            logger.warning("Unknown managed_by value for KPI: %r", managed_by)
+            continue
+
+        data[dept][quarter][band_key] += 1
+
+    # Convert to list for API output
+    final_output: List[Dict[str, Any]] = [
+        {
+            "department": dept,
+            "quarters": quarters,
+        }
+        for dept, quarters in sorted(data.items())
+    ]
+
+    logger.info(
+        "KPI: generated department charter summary (%d departments)",
+        len(final_output),
+    )
+    return final_output
