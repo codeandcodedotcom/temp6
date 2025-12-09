@@ -1,102 +1,91 @@
-# app/services/kpi_view.py  (or similar)
+# app/services/kpi_service.py
 
 from typing import List, Dict, Any
-from datetime import datetime
-import calendar
-
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select, func, case
+from sqlalchemy import select, func, extract
 
-from app.db.models import Project  # adjust import path to your ORM model
-
-
-async def get_charters_per_month(session: AsyncSession) -> List[Dict[str, Any]]:
-    """
-    Return list of rows:
-      {
-        "month": "January",
-        "self_managed": 15,
-        "team_lead": 7,
-        "project_manager": 5,
-        "team_of_PM_professionals": 28,
-      }
-    computed from the projects table.
-    """
-
-    month_expr = func.date_trunc("month", Project.created_at).label("month")
-
-    stmt = (
-        select(
-            month_expr,
-            func.sum(
-                case((Project.managed_by == "Self managed", 1), else_=0)
-            ).label("self_managed"),
-            func.sum(
-                case((Project.managed_by == "Project Lead", 1), else_=0)
-            ).label("team_lead"),
-            func.sum(
-                case((Project.managed_by == "Project Manager", 1), else_=0)
-            ).label("project_manager"),
-            func.sum(
-                case((Project.managed_by == "Team of PM professionals", 1), else_=0)
-            ).label("team_of_PM_professionals"),
-        )
-        .group_by(month_expr)
-        .order_by(month_expr)
-    )
-
-    result = await session.execute(stmt)
-    rows = result.all()
-
-    data: List[Dict[str, Any]] = []
-    for row in rows:
-        month_dt: datetime = row.month
-        month_name = calendar.month_name[month_dt.month]
-
-        data.append(
-            {
-                "month": month_name,
-                "self_managed": row.self_managed or 0,
-                "team_lead": row.team_lead or 0,
-                "project_manager": row.project_manager or 0,
-                "team_of_PM_professionals": row.team_of_PM_professionals or 0,
-            }
-        )
-
-    return data
-
-
-
---------
-
-
-
-from typing import List
-from fastapi import Depends, HTTPException
-
-from sqlalchemy.ext.asyncio import AsyncSession
-
-from app.api.logger import get_logger
-from app.db.session import get_session  # whatever your dependency is
-from app.services import kpi_view
-from app.models.pydantic_models import MonthlyCharter
+from app.db.models.projects import Project
+from app.utils.logger import get_logger
 
 logger = get_logger(__name__)
 
 
-@router.get("/kpi/charters-per-month", response_model=List[MonthlyCharter])
-async def charters_per_month(
-    session: AsyncSession = Depends(get_session),
-) -> List[MonthlyCharter]:
+# ------------------------------
+# HELPER: Map month → quarter
+# ------------------------------
+def _get_quarter(month: int) -> str:
+    if month in (1, 2, 3):
+        return "Quarter 1"
+    if month in (4, 5, 6):
+        return "Quarter 2"
+    if month in (7, 8, 9):
+        return "Quarter 3"
+    return "Quarter 4"
+
+
+# ---------------------------------------
+# MAIN KPI SERVICE
+# ---------------------------------------
+async def get_department_charters(session: AsyncSession) -> List[Dict[str, Any]]:
     """
-    Returns total charter counts per month, broken down by PM band.
+    Returns KPI:
+    Charter counts per department per quarter, broken down by PM band.
+    Shape must match DepartmentCharter Pydantic model.
     """
+
+    stmt = select(
+        Project.department,
+        Project.managed_by,
+        extract("month", Project.created_at).label("month")
+    ).where(Project.department.isnot(None))
+
+    result = await session.execute(stmt)
+    rows = result.all()
+
+    data: Dict[str, Dict[str, Dict[str, int]]] = {}
+
+    # Initialize structure while looping rows
+    for dept, managed_by, month in rows:
+        if dept not in data:
+            data[dept] = {
+                "Quarter 1": {"self_managed": 0, "team_lead": 0, "project_manager": 0, "team_of_PM_professionals": 0},
+                "Quarter 2": {"self_managed": 0, "team_lead": 0, "project_manager": 0, "team_of_PM_professionals": 0},
+                "Quarter 3": {"self_managed": 0, "team_lead": 0, "project_manager": 0, "team_of_PM_professionals": 0},
+                "Quarter 4": {"self_managed": 0, "team_lead": 0, "project_manager": 0, "team_of_PM_professionals": 0},
+            }
+
+        quarter = _get_quarter(int(month))
+
+        # Map managed_by to correct field
+        if managed_by == "Self managed":
+            data[dept][quarter]["self_managed"] += 1
+        elif managed_by == "Project Lead":
+            data[dept][quarter]["team_lead"] += 1
+        elif managed_by == "Project Manager":
+            data[dept][quarter]["project_manager"] += 1
+        elif managed_by == "Team of PM professionals":
+            data[dept][quarter]["team_of_PM_professionals"] += 1
+
+    # Convert into list for API output
+    final_output = [
+        {
+            "department": dept,
+            "quarters": quarters
+        }
+        for dept, quarters in data.items()
+    ]
+
+    logger.info("KPI: generated department charter summary (%d departments)", len(final_output))
+
+    return final_output
+
+------
+
+@router.get("/kpi/department-charters", response_model=List[DepartmentCharter])
+async def department_charters(session: AsyncSession = Depends(get_db_session)) -> List[DepartmentCharter]:
     try:
-        data = await kpi_view.get_charters_per_month(session=session)
-        return data
+        raw = await kpi_service.get_department_charters(session)
+        return raw
     except Exception:
-        logger.exception("Failed to fetch charters per month")
-        raise HTTPException(
-            status_code=500,
-            detail="Failed to fetch charters per month",
-    )
+        logger.exception("Failed to fetch department charters")
+        raise HTTPException(status_code=500, detail="Failed to fetch department charters")
