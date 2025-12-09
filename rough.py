@@ -1,46 +1,66 @@
-# app/utils/json_sanitizer.py (or wherever you put it)
-from datetime import datetime, date
-from uuid import UUID
-from typing import Any
+# app/services/kpi_view.py  (or similar)
 
-try:
-    # pydantic v2
-    from pydantic import BaseModel
-except ImportError:
-    # pydantic v1 fallback
-    from pydantic import BaseModel  # type: ignore
+from typing import List, Dict, Any
+from datetime import datetime
+import calendar
+
+from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy import select, func, case
+
+from app.db.models import Project  # adjust import path to your ORM model
 
 
-def _sanitize_for_db(value: Any) -> Any:
+async def get_charters_per_month(session: AsyncSession) -> List[Dict[str, Any]]:
     """
-    Recursively convert values so they can be stored in JSONB columns.
-
-    - Pydantic models -> dict via .model_dump() / .dict()
-    - UUID / datetime / date -> str (ISO)
-    - dict / list -> walk recursively
-    - everything else returned as-is
+    Return list of rows:
+      {
+        "month": "January",
+        "self_managed": 15,
+        "team_lead": 7,
+        "project_manager": 5,
+        "team_of_PM_professionals": 28,
+      }
+    computed from the projects table.
     """
-    # 🔹 Handle Pydantic models (ProjectScope, BudgetBreakdown, Timeline, PMRoleProfile, etc.)
-    if isinstance(value, BaseModel):
-        try:
-            value = value.model_dump()  # pydantic v2
-        except AttributeError:
-            value = value.dict()        # pydantic v1
 
-    # 🔹 Dict: sanitize keys and values
-    if isinstance(value, dict):
-        return {str(k): _sanitize_for_db(v) for k, v in value.items()}
+    month_expr = func.date_trunc("month", Project.created_at).label("month")
 
-    # 🔹 List / tuple
-    if isinstance(value, (list, tuple)):
-        return [_sanitize_for_db(v) for v in value]
+    stmt = (
+        select(
+            month_expr,
+            func.sum(
+                case((Project.managed_by == "Self managed", 1), else_=0)
+            ).label("self_managed"),
+            func.sum(
+                case((Project.managed_by == "Project Lead", 1), else_=0)
+            ).label("team_lead"),
+            func.sum(
+                case((Project.managed_by == "Project Manager", 1), else_=0)
+            ).label("project_manager"),
+            func.sum(
+                case((Project.managed_by == "Team of PM professionals", 1), else_=0)
+            ).label("team_of_PM_professionals"),
+        )
+        .group_by(month_expr)
+        .order_by(month_expr)
+    )
 
-    # 🔹 UUID / datetime / date -> string
-    if isinstance(value, UUID):
-        return str(value)
+    result = await session.execute(stmt)
+    rows = result.all()
 
-    if isinstance(value, (datetime, date)):
-        return value.isoformat()
+    data: List[Dict[str, Any]] = []
+    for row in rows:
+        month_dt: datetime = row.month
+        month_name = calendar.month_name[month_dt.month]
 
-    # primitives are fine
-    return value
+        data.append(
+            {
+                "month": month_name,
+                "self_managed": row.self_managed or 0,
+                "team_lead": row.team_lead or 0,
+                "project_manager": row.project_manager or 0,
+                "team_of_PM_professionals": row.team_of_PM_professionals or 0,
+            }
+        )
+
+    return data
