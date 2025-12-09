@@ -64,3 +64,39 @@ async def get_charters_per_month(session: AsyncSession) -> List[Dict[str, Any]]:
         )
 
     return data
+
+
+
+--------
+
+
+
+from typing import List
+from fastapi import Depends, HTTPException
+
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from app.api.logger import get_logger
+from app.db.session import get_session  # whatever your dependency is
+from app.services import kpi_view
+from app.models.pydantic_models import MonthlyCharter
+
+logger = get_logger(__name__)
+
+
+@router.get("/kpi/charters-per-month", response_model=List[MonthlyCharter])
+async def charters_per_month(
+    session: AsyncSession = Depends(get_session),
+) -> List[MonthlyCharter]:
+    """
+    Returns total charter counts per month, broken down by PM band.
+    """
+    try:
+        data = await kpi_view.get_charters_per_month(session=session)
+        return data
+    except Exception:
+        logger.exception("Failed to fetch charters per month")
+        raise HTTPException(
+            status_code=500,
+            detail="Failed to fetch charters per month",
+    )
