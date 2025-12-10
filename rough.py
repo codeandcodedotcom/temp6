@@ -1,109 +1,95 @@
-# ----- Helper: month -> fiscal quarter -----
-def _get_quarter(month: int) -> str:
+# src/app/services/html_to_pdf.py
+
+from pathlib import Path
+from typing import Tuple, Union
+from uuid import UUID
+
+from xhtml2pdf import pisa  # make sure:  pip install xhtml2pdf
+from app.core.logging import get_logger
+
+logger = get_logger(__name__)
+
+# src/ directory (this file is src/app/services/html_to_pdf.py)
+SRC_ROOT = Path(__file__).resolve().parents[2]
+
+# Folder where PDFs will be written: src/generated_pdf
+PDF_ROOT = SRC_ROOT / "generated_pdf"
+
+# URL prefix under which we’ll serve these PDFs
+PDF_URL_PREFIX = "/pdf"
+
+
+def generate_project_pdf(
+    html_doc: str,
+    project_id: Union[str, UUID],
+) -> Tuple[Path, str]:
     """
-    Map a calendar month (1-12) to *fiscal* quarters:
-    Q1: Apr-Jun, Q2: Jul-Sep, Q3: Oct-Dec, Q4: Jan-Mar.
+    Render HTML to a PDF file on disk and return (file_path, public_url).
+    File will be stored as  <project_id>.id  in src/generated_pdf.
     """
-    if month in (4, 5, 6):
-        return "Quarter 1"
-    if month in (7, 8, 9):
-        return "Quarter 2"
-    if month in (10, 11, 12):
-        return "Quarter 3"
-    # Jan, Feb, Mar
-    return "Quarter 4"
+
+    PDF_ROOT.mkdir(parents=True, exist_ok=True)
+
+    project_id_str = str(project_id)
+
+    # You asked for `<project_id>.id` as the filename:
+    filename = f"{project_id_str}.id"   # content is still a PDF
+
+    pdf_path = PDF_ROOT / filename
+    logger.info("Generating PDF at %s", pdf_path)
+
+    # Write PDF
+    with pdf_path.open("wb") as f:
+        result = pisa.CreatePDF(html_doc, dest=f)
+
+    if result.err:
+        logger.error("Failed to generate PDF for project %s: %s", project_id_str, result.err)
+        raise RuntimeError("Failed to generate PDF")
+
+    # This URL is what we’ll store in the DB and return to frontend
+    public_url = f"{PDF_URL_PREFIX}/{filename}"
+
+    return pdf_path, public_url
+
+    -----
+
+# src/app/main.py
+
+from pathlib import Path
+from fastapi.staticfiles import StaticFiles
+
+from fastapi import FastAPI
+
+app = FastAPI(...)
+
+# existing routers...
+# app.include_router(...)
+
+# Figure out src/ and generated_pdf path
+SRC_ROOT = Path(__file__).resolve().parents[1]   # src/app -> parents[1] = src
+PDF_DIR = SRC_ROOT / "generated_pdf"
+PDF_DIR.mkdir(exist_ok=True)
+
+# Serve files under /pdf/...
+app.mount("/pdf", StaticFiles(directory=str(PDF_DIR)), name="pdf")
 
 
-async def get_department_charters(session: AsyncSession) -> List[Dict[str, Any]]:
-    """
-    Charter counts per department per fiscal quarter,
-    broken down by PM band.
-    """
-    logger.info("Fetching department charter counts from projects table...")
 
-    stmt = (
-        select(
-            Project.department,
-            Project.managed_by,
-            extract("month", Project.created_at).label("month"),
-        )
-        .where(
-            Project.department.isnot(None),
-            Project.created_at.isnot(None),
-            Project.managed_by.isnot(None),
-        )
-    )
+------
 
-    result = await session.execute(stmt)
-    rows = result.all()
 
-    # data[dept][quarter_label] = { band -> count }
-    data: Dict[str, Dict[str, Dict[str, int]]] = {}
+response = {
+    "project_id": project_id,
+    "charter_id": charter_id,
+    ...
+}
 
-    for dept, managed_by, month in rows:
-        if dept is None or month is None:
-            continue
+# 1. build HTML
+html_doc = render_html_from_response(response)
 
-        # Initialise quarters for this department once
-        if dept not in data:
-            data[dept] = {
-                "Quarter 1": {
-                    "self_managed": 0,
-                    "team_lead": 0,
-                    "project_manager": 0,
-                    "team_of_PM_professionals": 0,
-                },
-                "Quarter 2": {
-                    "self_managed": 0,
-                    "team_lead": 0,
-                    "project_manager": 0,
-                    "team_of_PM_professionals": 0,
-                },
-                "Quarter 3": {
-                    "self_managed": 0,
-                    "team_lead": 0,
-                    "project_manager": 0,
-                    "team_of_PM_professionals": 0,
-                },
-                "Quarter 4": {
-                    "self_managed": 0,
-                    "team_lead": 0,
-                    "project_manager": 0,
-                    "team_of_PM_professionals": 0,
-                },
-            }
+# 2. generate PDF using only project_id
+_, pdf_url = generate_project_pdf(html_doc, project_id=project_id)
 
-        quarter = _get_quarter(int(month))
-
-        # Normalise managed_by text
-        raw = (managed_by or "").strip().lower()
-        band_key: str | None = None
-
-        if raw.startswith("self"):
-            band_key = "self_managed"
-        elif raw.startswith("project lead"):
-            band_key = "team_lead"
-        elif raw.startswith("project manager"):
-            band_key = "project_manager"
-        elif raw.startswith("team of pm"):
-            band_key = "team_of_PM_professionals"
-        else:
-            logger.warning("Unknown managed_by value for KPI: %r", managed_by)
-            continue
-
-        data[dept][quarter][band_key] += 1
-
-    # Convert to list for API output
-    final_output: List[Dict[str, Any]] = [
-        {
-            "department": dept,
-            "quarters": quarters,
-        }
-        for dept, quarters in sorted(data.items())
-    ]
-
-    logger.info(
-        "KPI: generated department charter summary (%d departments)",
-        len(final_output),
-    )
-    return final_output
+# 3. attach URL to response so it can be stored + returned
+#    use the exact key your DB / Pydantic model expects
+response["charter_pdf_url"] = pdf_url   # or "pdf_url", "charter_pdf", etc.
