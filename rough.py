@@ -1,136 +1,207 @@
-# src/app/api/update_charter.py
-from typing import Any, Dict, Optional
+# app/services/update_charter_service.py
+from datetime import datetime
+from typing import Optional, Tuple
 from uuid import UUID
-from fastapi import APIRouter, Body, Depends, HTTPException, Path, status
+
+from sqlalchemy import select
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.db.session_new import get_db_session
 from app.models.pydantic_models import ProjectCharter
-from app.services.update_charter_service import update_charter as update_charter_service
+from app.utils.json_sanitizer import _sanitize_for_db
 from app.utils.logger import get_logger
+
+# ORM models (match the names in your screenshots)
+from app.schemas.charter import Charter as DBCharter
+from app.schemas.charter_section import CharterSection as DBCharterSection
+from app.schemas.charter_version import CharterVersion as DBCharterVersion
 
 logger = get_logger(__name__)
 
-router = APIRouter(tags=["charter"])
 
-
-class UpdateCharterResponseDict(Dict[str, Any]):
+async def update_charter(
+    session: AsyncSession,
+    charter: ProjectCharter,
+    user_id: UUID,
+    *,
+    charter_section_updated: Optional[str] = None,
+    current_pdf: Optional[str] = None,
+) -> Tuple[DBCharter, Optional[DBCharterSection], DBCharterVersion]:
     """
-    Response will be a small dict; kept dynamic so we don't have to duplicate Pydantic models here.
-    Keys:
-      - charter_id: str
-      - section_updated: Optional[str]
-      - version_id: Optional[str]
-      - message: str
+    Update charters table (charter_json + last_modified_* + current_pdf),
+    update a single charter_sections row (section_json + updated_*) if requested,
+    and insert a new charter_versions snapshot row.
     """
+    now = datetime.utcnow()
 
+    # get flat payload and sanitized json for DB
+    charter_payload = charter.model_dump() if hasattr(charter, "model_dump") else charter.dict()
+    charter_json = _sanitize_for_db(charter_payload)
 
-@router.put("/charter/{charter_id}/update", response_model=UpdateCharterResponseDict)
-async def update_charter_endpoint(
-    charter_id: UUID = Path(..., description="Charter ID to update (UUID)"),
-    payload: Dict[str, Any] = Body(..., description="Flat charter payload (same shape frontend sends)"),
-    session: AsyncSession = Depends(get_db_session),
-) -> UpdateCharterResponseDict:
-    """
-    Update a charter:
-      - Accepts a flat JSON (charter fields + extras)
-      - Required extra: `user_id` (UUID)
-      - Optional extras: `charter_section_updated` (str), `current_pdf` (str)
-    The remainder of the body is validated against the ProjectCharter Pydantic model.
-    """
+    # charter_id must be present
+    charter_id = getattr(charter, "charter_id", None) or charter_payload.get("charter_id")
+    if charter_id is None:
+        raise ValueError("charter.charter_id is required to update a charter")
 
-    # ------------- Extract extras from flat payload -------------
-    user_id_raw = payload.pop("user_id", None)
-    if not user_id_raw:
-        raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-            detail=[{"loc": ["body", "user_id"], "msg": "Field required", "type": "missing"}],
+    # fetch existing charter row
+    res = await session.execute(select(DBCharter).where(DBCharter.charter_id == charter_id))
+    db_charter = res.scalars().one_or_none()
+    if db_charter is None:
+        raise ValueError(f"Charter with id {charter_id} not found")
+
+    # update charter master row
+    db_charter.charter_json = charter_json
+    db_charter.last_modified_by = user_id
+    db_charter.last_modified_at = now
+    if current_pdf is not None:
+        db_charter.current_pdf = current_pdf
+
+    session.add(db_charter)
+
+    # optional: update single section
+    updated_section_row: Optional[DBCharterSection] = None
+    if charter_section_updated:
+        # try to find section payload in incoming flat payload
+        section_payload = None
+        if isinstance(charter_payload, dict):
+            section_payload = charter_payload.get(charter_section_updated)
+        if section_payload is None:
+            section_payload = {}
+        section_json = _sanitize_for_db(section_payload)
+
+        # try to fetch existing section row
+        q = select(DBCharterSection).where(
+            DBCharterSection.charter_id == charter_id,
+            DBCharterSection.section_name == charter_section_updated,
         )
+        sec_res = await session.execute(q)
+        existing_section = sec_res.scalars().one_or_none()
 
-    try:
-        user_id = UUID(str(user_id_raw))
-    except Exception:
-        raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-            detail=[{"loc": ["body", "user_id"], "msg": "Invalid UUID", "type": "value_error.uuid"}],
-        )
-
-    charter_section_updated: Optional[str] = payload.pop("charter_section_updated", None)
-    current_pdf: Optional[str] = payload.pop("current_pdf", None)
-
-    # ------------- Validate remaining payload as ProjectCharter (flat payload) -------------
-    # The payload now contains the fields that make up the charter object (flat).
-    try:
-        charter_obj = ProjectCharter.parse_obj(payload)
-    except Exception as exc:
-        # Pydantic error -> convert to 422 with details so frontend sees validation issues
-        logger.exception("ProjectCharter validation failed for update payload")
-        # If pydantic raises ValidationError, it has .errors(); but keep generic fallback:
-        raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-            detail=getattr(exc, "errors", str(exc)),
-        )
-
-    # Ensure the incoming charter_id (path) matches the charter object if it has one
-    # ProjectCharter likely has a charter_id field. If present, ensure it matches path param.
-    try:
-        incoming_charter_id = getattr(charter_obj, "charter_id", None)
-        if incoming_charter_id and str(incoming_charter_id) != str(charter_id):
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail=[{
-                    "loc": ["path", "charter_id"],
-                    "msg": "Path charter_id does not match payload charter_id",
-                    "type": "value_error"
-                }]
+        if existing_section:
+            existing_section.section_json = section_json
+            existing_section.updated_by = user_id
+            existing_section.updated_at = now
+            session.add(existing_section)
+            updated_section_row = existing_section
+        else:
+            # insert new section row (handle race using flush + IntegrityError)
+            new_section = DBCharterSection(
+                charter_id=charter_id,
+                section_name=charter_section_updated,
+                section_json=section_json,
+                updated_by=user_id,
+                updated_at=now,
             )
-    except Exception:
-        # If attribute access behaves oddly, ignore and proceed — primary key is path param.
-        pass
+            session.add(new_section)
+            try:
+                await session.flush()
+                updated_section_row = new_section
+                logger.info("Created missing charter_section %s for charter %s", charter_section_updated, charter_id)
+            except IntegrityError:
+                # another process inserted the same row concurrently -> rollback and re-fetch
+                await session.rollback()
+                sec_res = await session.execute(q)
+                existing_section = sec_res.scalars().one_or_none()
+                if existing_section is None:
+                    # if still missing, re-raise
+                    raise
+                existing_section.section_json = section_json
+                existing_section.updated_by = user_id
+                existing_section.updated_at = now
+                session.add(existing_section)
+                await session.flush()
+                updated_section_row = existing_section
 
-    # ------------- Call service -------------
+    # insert new charter_version snapshot
+    version_row = DBCharterVersion(
+        charter_id=charter_id,
+        version_by=user_id,
+        version_at=now,
+        charter_json=charter_json,
+    )
+    session.add(version_row)
+
+    # final persist: commit so changes are durable
+    await session.commit()
+
+    logger.info("Updated charter %s (modified_by=%s). Inserted new version.", charter_id, user_id)
+
+    return db_charter, updated_section_row, version_row
+
+
+-------
+
+# app/api/update_charter.py
+from fastapi import APIRouter, Depends, HTTPException
+from pydantic import BaseModel
+from typing import Optional
+from uuid import UUID
+
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from app.db.session_new import get_db_session
+from app.services.update_charter_service import update_charter
+from app.models.pydantic_models import ProjectCharter
+from app.utils.logger import get_logger
+
+router = APIRouter(tags=["charter"])
+logger = get_logger(__name__)
+
+
+# ---------- Request Model ----------
+class UpdateCharterRequest(BaseModel):
+    # Flat payload containing the whole charter fields
+    user_id: UUID
+    charter_section_updated: Optional[str] = None
+    current_pdf: Optional[str] = None
+
+    # Everything else should be accepted as part of the flat payload
+    # so allow arbitrary extra fields
+    class Config:
+        extra = "allow"
+
+
+# ---------- Response Model ----------
+class UpdateCharterResponse(BaseModel):
+    charter_id: UUID
+    section_updated: Optional[str] = None
+    version_id: Optional[int] = None
+    message: str
+
+
+# ---------- Endpoint ----------
+@router.put("/charter/{charter_id}/update", response_model=UpdateCharterResponse)
+async def update_charter_endpoint(
+    charter_id: UUID,
+    payload: UpdateCharterRequest,
+    session: AsyncSession = Depends(get_db_session),
+):
+    """
+    Update charter, charter section (optional), and insert a new version snapshot.
+    """
     try:
-        db_charter, updated_section_row, version_row = await update_charter_service(
+        # Build ProjectCharter pydantic model from flat payload
+        # Include charter_id because service expects it inside the model
+        flat_payload = payload.dict()
+        flat_payload["charter_id"] = charter_id
+
+        charter_model = ProjectCharter(**flat_payload)
+
+        db_charter, updated_section, version_row = await update_charter(
             session=session,
-            charter=charter_obj,
-            user_id=user_id,
-            charter_section_updated=charter_section_updated,
-            current_pdf=current_pdf,
+            charter=charter_model,
+            user_id=payload.user_id,
+            charter_section_updated=payload.charter_section_updated,
+            current_pdf=payload.current_pdf,
         )
-    except HTTPException:
-        # propagate explicit service HTTPExceptions
-        raise
-    except Exception as exc:
-        logger.exception("Unhandled exception in update_charter_service")
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="Failed to update charter due to server error",
-        ) from exc
 
-    # ------------- Build response -------------
-    # charter_id: prefer db_charter.charter_id
-    try:
-        resp_charter_id = str(getattr(db_charter, "charter_id"))
-    except Exception:
-        resp_charter_id = str(charter_id)
+        return UpdateCharterResponse(
+            charter_id=db_charter.charter_id,
+            section_updated=payload.charter_section_updated,
+            version_id=version_row.version_id,
+            message="Charter updated successfully",
+        )
 
-    # section_updated: prefer explicit param or updated_section_row.section_name if available
-    section_updated = charter_section_updated
-    if not section_updated and updated_section_row is not None:
-        section_updated = getattr(updated_section_row, "section_name", None)
-
-    # version_id: if version_row exists and has version_id attribute
-    version_id = None
-    if version_row is not None:
-        version_id = getattr(version_row, "version_id", None)
-        if version_id is not None:
-            version_id = str(version_id)
-
-    response: UpdateCharterResponseDict = {
-        "charter_id": resp_charter_id,
-        "section_updated": section_updated,
-        "version_id": version_id,
-        "message": "Charter updated successfully",
-    }
-
-    return response
+    except Exception as e:
+        logger.error(f"Update charter failed: {e}")
+        raise HTTPException(status_code=400, detail=str(e))
