@@ -1,104 +1,79 @@
-# app/api/update_charter.py
-from typing import Any, Dict, Optional
 from uuid import UUID
-
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
-from pydantic import ValidationError
+from typing import Optional
 
-from app.db.session_new import get_db_session
-from app.models.pydantic_models import ProjectCharter  # adjust import path if different
-from app.services.update_charter_service import update_charter  # your service function
 from app.utils.logger import get_logger
+from app.db.session_new import get_db_session
+from app.services.update_charter_service import update_charter
+from app.api.update_charter import UpdateCharterRequest, UpdateCharterResponse  # adjust import path if needed
 
 logger = get_logger(__name__)
 router = APIRouter(tags=["charter"])
 
 
-class UpdateCharterResponseModel(Dict[str, Any]):
-    """
-    Minimal response structure returned to client.
-    You can replace with a pydantic BaseModel if you prefer.
-    Keys: charter_id (UUID), section_updated (Optional[str]), version_id (Optional[UUID]), message (str)
-    """
-    pass
-
-
-@router.put(
-    "/charter/{charter_id}/update",
-    response_model=Dict[str, Any],
-    status_code=status.HTTP_200_OK,
-)
+@router.put("/charter/{charter_id}/update", response_model=UpdateCharterResponse)
 async def update_charter_endpoint(
     charter_id: UUID,
-    payload: Dict[str, Any],  # accept raw flat payload from frontend
+    payload: UpdateCharterRequest,
     session: AsyncSession = Depends(get_db_session),
 ):
     """
-    Update a charter: update charters JSON + last_modified columns, update a single charter_section
-    (identified by 'charter_section_updated' in payload), and insert a new charter_version row.
+    Update a charter (charter_json + last_modified columns), update a single
+    charter_section identified by `payload.charter_section_updated` and insert
+    a new charter_versions snapshot row.
 
-    The frontend will send a FLAT payload (the same structure as the backend often returns).
-    This endpoint supports two shapes:
-      1) payload contains a top-level "charter" key: {"charter": {...}, "user_id": "...", ...}
-      2) payload is flat: {"user_id": "...", "project_title": "...", "description": "...", ...}
+    Request body must include user_id and the full/flat charter JSON (as we agreed).
     """
-    # --- required top-level fields ---
-    user_id = payload.get("user_id")
-    if not user_id:
-        raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-            detail=[{"loc": ["body", "user_id"], "msg": "Field required", "type": "value_error.missing"}],
-        )
 
-    # optional helpers
-    charter_section_updated: Optional[str] = payload.get("charter_section_updated")
-    current_pdf: Optional[str] = payload.get("current_pdf")
-
-    # Build the ProjectCharter model. Support both nested and flat payloads.
-    # If payload has "charter" key, prefer that; otherwise use the whole payload as charter data.
-    charter_raw = payload.get("charter", payload.copy())
-
-    # Ensure the charter_id is consistent with URL path if not provided
-    charter_raw.setdefault("charter_id", str(charter_id))
-
-    # Validate and build ProjectCharter (pydantic v2 .model_validate used across your codebase)
+    # call service
     try:
-        charter_obj = ProjectCharter.model_validate(charter_raw)
-    except ValidationError as ve:
-        # Return pydantic validation errors with 422
-        logger.debug("ProjectCharter validation failed: %s", ve.errors())
-        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=ve.errors())
-    except Exception as e:
-        logger.exception("Unexpected error while validating charter payload")
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
-
-    # Call service to perform updates. Keep service boundaries thin (you said update_charter_service handles everything).
-    try:
-        # service signature expected:
-        # update_charter(session, charter: ProjectCharter, user_id: UUID|str,
-        #                charter_section_updated: Optional[str] = None, current_pdf: Optional[str] = None)
         result = await update_charter(
             session=session,
-            charter=charter_obj,
-            user_id=UUID(str(user_id)),
-            charter_section_updated=charter_section_updated,
-            current_pdf=current_pdf,
+            charter=payload.charter,           # if your payload is flat option B, adjust accordingly
+            user_id=payload.user_id,
+            charter_section_updated=payload.charter_section_updated,
+            current_pdf=payload.current_pdf,
         )
     except HTTPException:
-        # let service raise HTTPException if appropriate (e.g. not found) - re-raise
+        # let service raise HTTPException for known cases
         raise
     except Exception as e:
-        logger.exception("Failed to update charter %s", charter_id)
-        # don't leak internals
-        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Failed to update charter")
+        logger.exception("update_charter service failed")
+        raise HTTPException(status_code=500, detail="Failed to update charter") from e
 
-    # result expected to be something like {"charter_id": <UUID>, "section_updated": "assumptions", "version_id": <UUID>}
+    # ---- handle tuple result ----
+    if not isinstance(result, tuple):
+        # defensive: if service changes, return clear error
+        raise HTTPException(
+            status_code=500,
+            detail="update_charter service returned unexpected type (expected tuple)."
+        )
+
+    try:
+        db_charter, updated_section_row, version_row = result
+    except Exception:
+        raise HTTPException(
+            status_code=500,
+            detail="update_charter service returned tuple with unexpected length."
+        )
+
+    # Extract values defensively (use getattr so missing attributes don't crash)
+    charter_id_val = getattr(db_charter, "charter_id", None) or charter_id
+    # section name — your CharterSection model likely has section_name or section_id
+    section_updated_val = (
+        getattr(updated_section_row, "section_name", None)
+        or getattr(updated_section_row, "section_id", None)
+        or None
+    )
+    # version id — your CharterVersion likely exposes 'version_id' (or id)
+    version_id_val = getattr(version_row, "version_id", None) or getattr(version_row, "id", None)
+
     response_body = {
-        "charter_id": str(result.get("charter_id", charter_id)),
-        "section_updated": result.get("section_updated"),
-        "version_id": str(result.get("version_id")) if result.get("version_id") else None,
-        "message": result.get("message", "Charter updated"),
+        "charter_id": str(charter_id_val),
+        "section_updated": section_updated_val,
+        "version_id": str(version_id_val) if version_id_val is not None else None,
+        "message": "Charter updated successfully",
     }
 
     return response_body
