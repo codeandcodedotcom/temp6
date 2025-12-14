@@ -1,84 +1,111 @@
-from pathlib import Path
-import uuid
+def json_to_markdown(data, level=1):
+    md = ""
 
-OUTPUT_DIR = Path("generated_markdown")
-OUTPUT_DIR.mkdir(exist_ok=True)
+    if isinstance(data, dict):
+        for key, value in data.items():
+            md += f"\n{'#' * level} {key.replace('_', ' ').title()}\n\n"
+            md += json_to_markdown(value, level + 1)
 
+    elif isinstance(data, list):
+        for item in data:
+            if isinstance(item, (dict, list)):
+                md += json_to_markdown(item, level)
+            else:
+                md += f"- {item}\n"
+        md += "\n"
 
-def json_to_markdown(data: dict, file_name: str | None = None) -> str:
-    """
-    Converts arbitrary nested JSON to Markdown.
-    Returns markdown file path.
-    """
+    else:
+        md += f"{data}\n\n"
 
-    if not file_name:
-        file_name = f"project_charter_{uuid.uuid4().hex}.md"
+    return md
 
-    md_path = OUTPUT_DIR / file_name
-    lines = []
+-----
 
-    def format_key(key: str) -> str:
-        return key.replace("_", " ").title()
+from reportlab.lib.pagesizes import A4
+from reportlab.platypus import (
+    SimpleDocTemplate, Paragraph, ListFlowable, ListItem, Spacer
+)
+from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
+from reportlab.lib.enums import TA_LEFT
+import re
 
-    def render(value, level=1):
-        prefix = "#" * min(level + 1, 6)
+def markdown_to_pdf(markdown_text, output_path):
+    doc = SimpleDocTemplate(output_path, pagesize=A4)
+    styles = getSampleStyleSheet()
 
-        if isinstance(value, dict):
-            for k, v in value.items():
-                lines.append(f"{prefix} {format_key(k)}\n")
-                render(v, level + 1)
+    styles.add(ParagraphStyle(
+        name="H1", fontSize=16, spaceAfter=10, spaceBefore=14, bold=True
+    ))
+    styles.add(ParagraphStyle(
+        name="H2", fontSize=14, spaceAfter=8, spaceBefore=12, bold=True
+    ))
+    styles.add(ParagraphStyle(
+        name="H3", fontSize=12, spaceAfter=6, spaceBefore=10, bold=True
+    ))
+    styles.add(ParagraphStyle(
+        name="Body", fontSize=10, spaceAfter=6
+    ))
 
-        elif isinstance(value, list):
-            for item in value:
-                if isinstance(item, (dict, list)):
-                    render(item, level + 1)
-                else:
-                    lines.append(f"- {item}\n")
-            lines.append("\n")
+    story = []
+    lines = markdown_text.split("\n")
+
+    bullet_buffer = []
+
+    def flush_bullets():
+        nonlocal bullet_buffer
+        if bullet_buffer:
+            story.append(
+                ListFlowable(
+                    [ListItem(Paragraph(item, styles["Body"])) for item in bullet_buffer],
+                    bulletType="bullet",
+                    start="circle",
+                )
+            )
+            story.append(Spacer(1, 8))
+            bullet_buffer = []
+
+    for line in lines:
+        line = line.strip()
+
+        if not line:
+            flush_bullets()
+            continue
+
+        if line.startswith("### "):
+            flush_bullets()
+            story.append(Paragraph(line[4:], styles["H3"]))
+
+        elif line.startswith("## "):
+            flush_bullets()
+            story.append(Paragraph(line[3:], styles["H2"]))
+
+        elif line.startswith("# "):
+            flush_bullets()
+            story.append(Paragraph(line[2:], styles["H1"]))
+
+        elif line.startswith("- "):
+            bullet_buffer.append(line[2:])
 
         else:
-            lines.append(f"{value}\n\n")
+            flush_bullets()
+            story.append(Paragraph(line, styles["Body"]))
 
-    # Document title
-    lines.append("# Project Charter\n\n")
-    render(data)
-
-    md_path.write_text("".join(lines), encoding="utf-8")
-    return str(md_path)
-    -----
-
-import subprocess
-from pathlib import Path
+    flush_bullets()
+    doc.build(story)
 
 
-def markdown_to_pdf(md_path: str) -> str:
-    md_path = Path(md_path)
-    pdf_path = md_path.with_suffix(".pdf")
 
-    subprocess.run(
-        [
-            "pandoc",
-            str(md_path),
-            "-o",
-            str(pdf_path),
-            "--pdf-engine=xelatex"
-        ],
-        check=True
-    )
+----
 
-    return str(pdf_path)
-
-------
+def generate_charter_pdf(charter_json, output_pdf_path):
+    markdown = json_to_markdown(charter_json)
+    markdown_to_pdf(markdown, output_pdf_path)
 
 
-from json_to_markdown import json_to_markdown
-from markdown_to_pdf import markdown_to_pdf
-import json
 
-with open("output_template.json") as f:
-    data = json.load(f)
+generate_charter_pdf(
+    charter_json=charter_data,
+    output_pdf_path="project_charter.pdf"
+                                      )
 
-md_path = json_to_markdown(data)
-pdf_path = markdown_to_pdf(md_path)
 
-print("PDF generated:", pdf_path)
