@@ -10,100 +10,93 @@ from reportlab.platypus import (
     ListFlowable,
     ListItem,
     Table,
-    TableStyle
+    TableStyle,
+    PageBreak
 )
 from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
 from reportlab.lib.enums import TA_CENTER
 from reportlab.lib import colors
 
 
-# -----------------------------
-# PDF PAGE LAYOUT
-# -----------------------------
+# -------------------------------------------------
+# PAGE LAYOUT
+# -------------------------------------------------
 def page_layout(canvas, doc):
     canvas.saveState()
-
-    # Header
-    canvas.setFont("Helvetica-Bold", 10)
-    canvas.drawString(40, 820, "Project Charter")
-
-    # Footer
     canvas.setFont("Helvetica", 9)
-    canvas.drawString(40, 30, f"Generated on {datetime.now().strftime('%Y-%m-%d %H:%M')}")
-
+    canvas.drawString(40, 820, "Project Charter")
+    canvas.drawRightString(550, 820, f"Generated: {datetime.now().strftime('%Y-%m-%d %H:%M')}")
     canvas.restoreState()
 
 
-# -----------------------------
-# STYLE DEFINITIONS
-# -----------------------------
+# -------------------------------------------------
+# STYLES
+# -------------------------------------------------
 styles = getSampleStyleSheet()
 
 styles.add(ParagraphStyle(
-    name="TitleStyle",
-    fontSize=18,
-    leading=22,
+    name="Title",
+    fontSize=20,
+    leading=24,
     alignment=TA_CENTER,
     spaceAfter=24,
     fontName="Helvetica-Bold"
 ))
 
 styles.add(ParagraphStyle(
-    name="SectionHeader",
+    name="Section",
     fontSize=13,
     leading=16,
-    spaceBefore=16,
+    spaceBefore=18,
     spaceAfter=8,
     fontName="Helvetica-Bold"
 ))
 
 styles.add(ParagraphStyle(
-    name="BodyTextCustom",
+    name="Body",
     fontSize=10,
     leading=14,
     spaceAfter=6
 ))
 
 
-# -----------------------------
-# HELPER RENDER FUNCTIONS
-# -----------------------------
-def render_key_value(story, title, value):
-    story.append(Paragraph(title, styles["SectionHeader"]))
-    story.append(Paragraph(str(value), styles["BodyTextCustom"]))
+# -------------------------------------------------
+# HELPER RENDERERS
+# -------------------------------------------------
+def section(story, title):
+    story.append(Paragraph(title, styles["Section"]))
 
 
-def render_list(story, title, items):
-    story.append(Paragraph(title, styles["SectionHeader"]))
-    bullets = [
-        ListItem(Paragraph(str(item), styles["BodyTextCustom"]))
-        for item in items
-    ]
-    story.append(ListFlowable(bullets, bulletType="bullet"))
+def text(story, value):
+    story.append(Paragraph(str(value), styles["Body"]))
 
 
-def render_table(story, title, data_dict):
-    story.append(Paragraph(title, styles["SectionHeader"]))
+def bullet_list(story, items):
+    story.append(ListFlowable(
+        [ListItem(Paragraph(i, styles["Body"])) for i in items],
+        bulletType="bullet"
+    ))
 
-    table_data = [["Category", "Value"]]
-    for k, v in data_dict.items():
+
+def key_value_table(story, data: dict):
+    table_data = [["Field", "Value"]]
+    for k, v in data.items():
         table_data.append([k.replace("_", " ").title(), str(v)])
 
-    table = Table(table_data, colWidths=[250, 250])
+    table = Table(table_data, colWidths=[220, 300])
     table.setStyle(TableStyle([
         ("BACKGROUND", (0, 0), (-1, 0), colors.lightgrey),
         ("GRID", (0, 0), (-1, -1), 0.5, colors.grey),
         ("FONT", (0, 0), (-1, 0), "Helvetica-Bold"),
-        ("ALIGN", (0, 0), (-1, -1), "LEFT"),
     ]))
 
     story.append(table)
 
 
-# -----------------------------
-# MAIN PDF GENERATOR
-# -----------------------------
-def generate_project_charter_pdf(json_path, output_pdf):
+# -------------------------------------------------
+# MAIN GENERATOR
+# -------------------------------------------------
+def generate_charter_pdf(json_path: str, output_pdf: str):
     with open(json_path, "r", encoding="utf-8") as f:
         data = json.load(f)
 
@@ -113,59 +106,107 @@ def generate_project_charter_pdf(json_path, output_pdf):
         rightMargin=40,
         leftMargin=40,
         topMargin=60,
-        bottomMargin=60,
+        bottomMargin=60
     )
 
     story = []
 
-    # Title
-    story.append(Paragraph("Project Charter", styles["TitleStyle"]))
+    # ---------------- COVER ----------------
+    story.append(Paragraph("Project Charter", styles["Title"]))
 
-    # Basic Info
-    render_key_value(story, "Project Name", data.get("project_name", ""))
-    render_key_value(story, "Description", data.get("description", ""))
-    render_key_value(story, "Industry", data.get("industry", ""))
-    render_key_value(story, "Duration", data.get("duration", ""))
-    render_key_value(story, "Budget", data.get("budget", ""))
-    render_key_value(story, "Complexity Score", data.get("complexity_score", ""))
+    key_value_table(story, {
+        "Project Title": data.get("project_title"),
+        "Industry": data.get("industry"),
+        "Duration": data.get("duration"),
+        "Budget": data.get("budget"),
+        "Complexity Score": data.get("complexity_score"),
+        "Project Sponsor": data.get("project_sponsor"),
+        "Date": data.get("date"),
+    })
 
-    # Objectives
-    if "objectives" in data:
-        render_list(story, "Objectives", data["objectives"])
+    # ---------------- DESCRIPTION ----------------
+    section(story, "Project Description")
+    text(story, data.get("description"))
 
-    # Scope
-    if "project_scope" in data:
-        scope = data["project_scope"]
-        render_list(story, "In Scope", scope.get("in_scope", []))
-        render_list(story, "Out of Scope", scope.get("out_scope", []))
+    # ---------------- CURRENT STATE ----------------
+    section(story, "Current State")
+    bullet_list(story, data.get("current_state", []))
 
-    # Business Benefits
-    if "business_benefit" in data:
-        render_list(story, "Business Benefits", data["business_benefit"])
+    # ---------------- OBJECTIVES ----------------
+    section(story, "Objectives")
+    bullet_list(story, data.get("objectives", []))
 
-    # Budget Breakdown
-    if "budget_breakdown" in data:
-        render_table(story, "Budget Breakdown", data["budget_breakdown"].get("allocation", {}))
+    # ---------------- FUTURE STATE ----------------
+    section(story, "Future State")
+    bullet_list(story, data.get("future_state", []))
 
-    # Risks
-    if "risks_and_mitigation" in data:
-        story.append(Paragraph("Risks and Mitigation", styles["SectionHeader"]))
-        for risk in data["risks_and_mitigation"]:
-            text = (
-                f"<b>Risk:</b> {risk.get('risk')}<br/>"
-                f"<b>Impact:</b> {risk.get('impact')}<br/>"
-                f"<b>Mitigation:</b> {risk.get('mitigation')}"
-            )
-            story.append(Paragraph(text, styles["BodyTextCustom"]))
-            story.append(Spacer(1, 8))
+    # ---------------- HIGH LEVEL REQUIREMENTS ----------------
+    section(story, "High Level Requirements")
+    bullet_list(story, data.get("high_level_requirement", []))
 
-    # Dependencies
-    if "dependencies" in data:
-        render_list(story, "Dependencies", data["dependencies"])
+    # ---------------- BUSINESS BENEFITS ----------------
+    section(story, "Business Benefits")
+    bullet_list(story, data.get("business_benefit", []))
 
-    # Success Criteria
-    if "success_criteria" in data:
-        render_list(story, "Success Criteria", data["success_criteria"])
+    # ---------------- PROJECT SCOPE ----------------
+    section(story, "Project Scope")
+    text(story, "<b>Scope</b>")
+    text(story, data.get("project_scope", {}).get("scope"))
+
+    text(story, "<b>In Scope</b>")
+    bullet_list(story, data.get("project_scope", {}).get("in_scope", []))
+
+    text(story, "<b>Out of Scope</b>")
+    bullet_list(story, data.get("project_scope", {}).get("out_scope", []))
+
+    # ---------------- BUDGET BREAKDOWN ----------------
+    section(story, "Budget Breakdown")
+    key_value_table(story, data.get("budget_breakdown", {}).get("allocation", {}))
+
+    # ---------------- TIMELINE ----------------
+    section(story, "Project Timeline")
+    for phase, details in data.get("timeline", {}).items():
+        text(story, f"<b>{phase.replace('_', ' ').title()}</b>")
+        text(story, f"Duration: {details.get('duration')}")
+        text(story, "Prerequisites:")
+        bullet_list(story, details.get("prerequisites", []))
+        text(story, "Tasks:")
+        bullet_list(story, details.get("tasks", []))
+
+    # ---------------- DEPENDENCIES ----------------
+    section(story, "Dependencies")
+    bullet_list(story, data.get("dependencies", []))
+
+    # ---------------- RISKS ----------------
+    section(story, "Risks and Mitigation")
+    for risk in data.get("risks_and_mitigation", []):
+        text(story, f"<b>Risk:</b> {risk.get('risk')}")
+        text(story, f"<b>Impact:</b> {risk.get('impact')}")
+        text(story, f"<b>Mitigation:</b> {risk.get('mitigation')}")
+        Spacer(1, 8)
+
+    # ---------------- PM RESOURCE ----------------
+    section(story, "PM Resource Recommendation")
+    for pm in data.get("pm_resource_recommendation", []):
+        text(story, f"<b>Job Profile:</b> {pm.get('job_profile')}")
+        text(story, "<b>Skills</b>")
+        bullet_list(story, pm.get("skills", []))
+        text(story, "<b>Responsibilities</b>")
+        bullet_list(story, pm.get("responsibilities", []))
+        text(story, "<b>Tasks</b>")
+        bullet_list(story, pm.get("tasks", []))
+
+    # ---------------- LESSONS LEARNT ----------------
+    section(story, "Lessons Learnt")
+    bullet_list(story, data.get("lesson_learnt", []))
+
+    # ---------------- SUCCESS CRITERIA ----------------
+    section(story, "Success Criteria")
+    bullet_list(story, data.get("success_criteria", []))
+
+    # ---------------- ASSUMPTIONS ----------------
+    section(story, "Assumptions")
+    bullet_list(story, data.get("assumptions", []))
 
     doc.build(
         story,
@@ -174,12 +215,12 @@ def generate_project_charter_pdf(json_path, output_pdf):
     )
 
 
-# -----------------------------
+# -------------------------------------------------
 # ENTRY POINT
-# -----------------------------
+# -------------------------------------------------
 if __name__ == "__main__":
-    input_json = "project_charter.json"   # <-- your JSON file
-    output_pdf = "project_charter.pdf"
-
-    generate_project_charter_pdf(input_json, output_pdf)
-    print(f"PDF generated successfully: {Path(output_pdf).resolve()}")
+    generate_charter_pdf(
+        json_path="charter_json2.json",
+        output_pdf="project_charter.pdf"
+    )
+    print("PDF generated successfully.")
