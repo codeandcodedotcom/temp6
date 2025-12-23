@@ -1,24 +1,43 @@
-from reportlab.lib.pagesizes import A4
-from reportlab.lib.units import mm
+from fastapi import APIRouter, Depends, HTTPException
+from fastapi.responses import FileResponse
+from sqlalchemy.ext.asyncio import AsyncSession
+from app.db.session import get_db
+from app.schemas.charter import Charter as DBCharter
+from app.schemas.project import Project
+from pathlib import Path
 
-def page_layout(canvas, doc, project_title: str):
-    canvas.saveState()
+router = APIRouter()
 
-    # ===== HEADER =====
-    canvas.setFont("Helvetica", 9)
-    canvas.drawString(40, A4[1] - 40, project_title)
-    canvas.drawRightString(
-        A4[0] - 40,
-        A4[1] - 40,
-        f"Generated: {datetime.now().strftime('%d %b %Y')}"
+PDF_DIR = Path("src/generated_pdf")
+
+@router.get("/pdf/{filename}")
+async def serve_pdf(filename: str, session: AsyncSession = Depends(get_db)):
+    pdf_path = PDF_DIR / filename
+    if not pdf_path.exists():
+        raise HTTPException(status_code=404, detail="PDF not found")
+
+    # filename = project_charter_<charter_id>_<timestamp>.pdf
+    charter_id = filename.replace("project_charter_", "").split("_")[0]
+
+    charter = await session.get(DBCharter, charter_id)
+    project_title = "Project Charter"
+
+    if charter and charter.project_id:
+        project = await session.get(Project, charter.project_id)
+        if project and project.project_title:
+            project_title = project.project_title
+
+    safe_name = project_title.replace(" ", "_") + ".pdf"
+
+    return FileResponse(
+        path=str(pdf_path),
+        media_type="application/pdf",
+        headers={
+            "Content-Disposition": f'inline; filename="{safe_name}"'
+        }
     )
 
-    # ===== FOOTER (PAGE NUMBER) =====
-    canvas.setFont("Helvetica", 9)
-    canvas.drawRightString(
-        A4[0] - 40,   # right aligned
-        30,           # bottom margin
-        f"Page {canvas.getPageNumber()}"
-    )
+----
 
-    canvas.restoreState()
+from app.api import pdf
+app.include_router(pdf.router)
