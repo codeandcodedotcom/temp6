@@ -1,37 +1,44 @@
-month_expr = func.date_trunc("month", Project.created_at).label("month")
+from fastapi import APIRouter, Depends, HTTPException
+from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy import select
+from app.db.session_new import get_session
+from app.schemas.question import Question
+from app.utils.logger import get_logger
 
-stmt = (
-    select(
-        month_expr,
+router = APIRouter(prefix="/questionnaire", tags=["Questionnaire"])
+logger = get_logger(__name__)
 
-        func.sum(
-            case(
-                (func.lower(func.trim(Project.managed_by)) == "self managed", 1),
-                else_=0,
+@router.post("/seed")
+async def seed_questionnaire(questions: list[dict], session: AsyncSession = Depends(get_session)):
+    added = 0
+    updated = 0
+
+    try:
+        for q in questions:
+            qid = q["question_id"]
+
+            existing = await session.execute(
+                select(Question).where(Question.question_id == qid)
             )
-        ).label("self_managed"),
+            record = existing.scalar_one_or_none()
 
-        func.sum(
-            case(
-                (func.lower(func.trim(Project.managed_by)).in_(["project lead", "it project lead"]), 1),
-                else_=0,
-            )
-        ).label("team_lead"),
+            if record:
+                record.question_text = q["question_text"]
+                record.question_type = q["question_type"]
+                record.order_index = q["order_index"]
+                updated += 1
+            else:
+                session.add(Question(**q))
+                added += 1
 
-        func.sum(
-            case(
-                (func.lower(func.trim(Project.managed_by)) == "project manager", 1),
-                else_=0,
-            )
-        ).label("project_manager"),
+        await session.commit()
+        return {
+            "added": added,
+            "updated": updated,
+            "total": added + updated
+        }
 
-        func.sum(
-            case(
-                (func.lower(func.trim(Project.managed_by)) == "team of pm professionals", 1),
-                else_=0,
-            )
-        ).label("team_of_PM_professionals"),
-    )
-    .group_by(month_expr)
-    .order_by(month_expr)
-)
+    except Exception as e:
+        await session.rollback()
+        logger.exception("Questionnaire seed failed")
+        raise HTTPException(500, "Failed to seed questionnaire")
