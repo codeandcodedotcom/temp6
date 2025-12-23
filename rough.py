@@ -1,13 +1,12 @@
-raw = (managed_by or "").lower()
+stmt = (
+    select(
+        month_expr,
 
-if "self" in raw:
-    band_key = "self_managed"
-elif "it project lead" in raw or "project lead" in raw:
-    band_key = "team_lead"
-elif "project manager" in raw:
-    band_key = "project_manager"
-elif "team of pm" in raw:
-    band_key = "team_of_PM_professionals"
-else:
-    logger.warning("Unknown managed_by value for KPI: %s", managed_by)
-    continue
+        func.sum(case((Project.managed_by == "Self Managed", 1), else_=0)).label("self_managed"),
+        func.sum(case((Project.managed_by.in_(["Project Lead","IT Project Lead"]), 1), else_=0)).label("team_lead"),
+        func.sum(case((Project.managed_by == "Project Manager", 1), else_=0)).label("project_manager"),
+        func.sum(case((Project.managed_by == "Team of PM professionals", 1), else_=0)).label("team_of_PM_professionals"),
+    )
+    .group_by(month_expr)
+    .order_by(month_expr)
+)
