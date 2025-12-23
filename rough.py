@@ -1,43 +1,15 @@
-from fastapi import APIRouter, Depends, HTTPException
-from fastapi.responses import FileResponse
-from sqlalchemy.ext.asyncio import AsyncSession
-from app.db.session import get_db
-from app.schemas.charter import Charter as DBCharter
-from app.schemas.project import Project
-from pathlib import Path
+stmt = (
+    select(
+        month_expr,
 
-router = APIRouter()
+        func.sum(case(Project.managed_by == "Self managed", 1, else_=0)).label("self_managed"),
 
-PDF_DIR = Path("src/generated_pdf")
+        func.sum(case(Project.managed_by.in_(["Project Lead", "IT Project Lead"]), 1, else_=0)).label("team_lead"),
 
-@router.get("/pdf/{filename}")
-async def serve_pdf(filename: str, session: AsyncSession = Depends(get_db)):
-    pdf_path = PDF_DIR / filename
-    if not pdf_path.exists():
-        raise HTTPException(status_code=404, detail="PDF not found")
+        func.sum(case(Project.managed_by == "Project Manager", 1, else_=0)).label("project_manager"),
 
-    # filename = project_charter_<charter_id>_<timestamp>.pdf
-    charter_id = filename.replace("project_charter_", "").split("_")[0]
-
-    charter = await session.get(DBCharter, charter_id)
-    project_title = "Project Charter"
-
-    if charter and charter.project_id:
-        project = await session.get(Project, charter.project_id)
-        if project and project.project_title:
-            project_title = project.project_title
-
-    safe_name = project_title.replace(" ", "_") + ".pdf"
-
-    return FileResponse(
-        path=str(pdf_path),
-        media_type="application/pdf",
-        headers={
-            "Content-Disposition": f'inline; filename="{safe_name}"'
-        }
+        func.sum(case(Project.managed_by == "Team of PM professionals", 1, else_=0)).label("team_of_PM_professionals"),
     )
-
-----
-
-from app.api import pdf
-app.include_router(pdf.router)
+    .group_by(month_expr)
+    .order_by(month_expr)
+)
