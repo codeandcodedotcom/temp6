@@ -1,12 +1,8 @@
-- script: |
-    export ENV_NAME="dev"
-    export SKIP_AZURE_AUTH=true
-    python generate_swagger.py
-  workingDirectory: $(Build.SourcesDirectory)/src
-  displayName: "Generate Swagger JSON"
-
-
-if os.environ.get("SKIP_AZURE_AUTH", "").lower() in ("1", "true", "yes"):
-    os.environ["DATABRICKS_TOKEN"] = "dummy-token"
-    os.environ["DATABRICKS_HOST"] = "https://dummy"
-    return
+- task: CmdLine@2
+  displayName: "DEBUG – Show Pods"
+  inputs:
+    script: |
+      echo "Listing pods"
+      kubectl get pods -n apd-lit
+      echo "Describing pods"
+      kubectl describe pods -n apd-lit
