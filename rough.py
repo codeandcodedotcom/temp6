@@ -1,54 +1,33 @@
-from azure.identity import DefaultAzureCredential
-from azure.storage.blob import BlobServiceClient
-import os
+@echo off
+setlocal ENABLEDELAYEDEXPANSION
 
-ACCOUNT_URL = "https://mcseundevshsa.blob.core.windows.net"   # your storage account
+REM ===============================
+REM CONFIG
+REM ===============================
 
-CONTAINER_NAME = "apdlit-v1"
-FOLDER = "charter-pdfs"
+set TOKEN=PASTE_THE_FULL_BEARER_TOKEN_HERE_WITHOUT_QUOTES
+set URL=https://civ-apis-dev.rolls-royce.com/apd-lit/v1/pdf/project_charter_fece8fc9-2b60-40be-be36-fd96b85e1d2d.pdf
+set OUT=charter.pdf
 
-credential = DefaultAzureCredential()
-blob_service = BlobServiceClient(account_url=ACCOUNT_URL, credential=credential)
-container = blob_service.get_container_client(CONTAINER_NAME)
+REM ===============================
+REM DOWNLOAD
+REM ===============================
 
+curl -L ^
+ -H "Authorization: Bearer %TOKEN%" ^
+ -o "%OUT%" ^
+ "%URL%"
 
-------
+REM ===============================
+REM VERIFY
+REM ===============================
 
-from io import BytesIO
-from app.core.blob import container, FOLDER
-
-buffer = BytesIO()
-
-doc = SimpleDocTemplate(buffer, pagesize=A4, ...)
-doc.build(...)
-
-buffer.seek(0)
-blob_path = f"{FOLDER}/{pdf_filename}"
-
-container.upload_blob(
-    name=blob_path,
-    data=buffer,
-    overwrite=True,
-    content_type="application/pdf"
+echo.
+if exist "%OUT%" (
+    echo Download completed
+    dir "%OUT%"
+) else (
+    echo Download failed
 )
 
-------
-
-from fastapi.responses import StreamingResponse
-from app.core.blob import container, FOLDER
-
-
-@router.get("/pdf/{filename}")
-async def serve_pdf(filename: str):
-    blob_path = f"{FOLDER}/{filename}"
-    blob = container.get_blob_client(blob_path)
-
-    if not blob.exists():
-        raise HTTPException(404, "PDF not found")
-
-    return StreamingResponse(
-        blob.download_blob(),
-        media_type="application/pdf",
-        headers={"Content-Disposition": f'inline; filename="{filename}"'}
-)
-
+pause
