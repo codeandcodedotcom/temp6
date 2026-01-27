@@ -1,30 +1,42 @@
 import pytest
-from unittest.mock import AsyncMock
+from unittest.mock import AsyncMock, MagicMock
+from datetime import datetime
 
 from app.services import user_service
-from app.models.pydantic_models import UserCreate
 from app.schemas import User
+from app.models.pydantic_models import UserCreate
 
+
+# ------------------------------------------------------------------
+# get_user_by_email
+# ------------------------------------------------------------------
 
 @pytest.mark.asyncio
 async def test_get_user_by_email_found():
     session = AsyncMock()
 
-    mock_user = User(
-        user_id="123e4567e89b12d3a456426614174000",
+    dummy_user = User(
+        user_id="550e8400-e29b-41d4-a716-446655440000",
         user_name="Test User",
         email="test@example.com",
-        department="HR",
-        role="Admin",
+        department="IT",
+        role="admin",
+        created_at=datetime.utcnow(),
+        updated_at=datetime.utcnow(),
     )
 
-    result = AsyncMock()
-    result.scalars.return_value.first.return_value = mock_user
+    # result.scalars().first() chain
+    scalars = MagicMock()
+    scalars.first.return_value = dummy_user
+
+    result = MagicMock()
+    result.scalars.return_value = scalars
+
     session.execute.return_value = result
 
     user = await user_service.get_user_by_email(session, "test@example.com")
 
-    assert user == mock_user
+    assert user == dummy_user
     session.execute.assert_called_once()
 
 
@@ -32,69 +44,93 @@ async def test_get_user_by_email_found():
 async def test_get_user_by_email_not_found():
     session = AsyncMock()
 
-    result = AsyncMock()
-    result.scalars.return_value.first.return_value = None
+    scalars = MagicMock()
+    scalars.first.return_value = None
+
+    result = MagicMock()
+    result.scalars.return_value = scalars
+
     session.execute.return_value = result
 
     user = await user_service.get_user_by_email(session, "missing@example.com")
 
     assert user is None
+    session.execute.assert_called_once()
 
 
-@pytest.mark.asyncio
-async def test_create_or_update_user_creates_new(monkeypatch):
-    session = AsyncMock()
-
-    monkeypatch.setattr(
-        user_service,
-        "get_user_by_email",
-        AsyncMock(return_value=None),
-    )
-
-    payload = UserCreate(
-        user_id="123e4567e89b12d3a456426614174000",
-        user_name="New User",
-        email="new@example.com",
-        department="HR",
-        role="Admin",
-    )
-
-    user = await user_service.create_or_update_user(session, payload)
-
-    session.add.assert_called_once()
-    session.flush.assert_called()
-    assert user.email == "new@example.com"
-
+# ------------------------------------------------------------------
+# create_or_update_user
+# ------------------------------------------------------------------
 
 @pytest.mark.asyncio
 async def test_create_or_update_user_updates_existing(monkeypatch):
     session = AsyncMock()
 
     existing_user = User(
-        user_id="123e4567e89b12d3a456426614174000",
+        user_id="550e8400-e29b-41d4-a716-446655440000",
         user_name="Old Name",
-        email="existing@example.com",
-        department="IT",
-        role="User",
+        email="test@example.com",
+        department="Old Dept",
+        role="user",
+        created_at=datetime.utcnow(),
+        updated_at=datetime.utcnow(),
     )
+
+    payload = UserCreate(
+        user_id="550e8400-e29b-41d4-a716-446655440000",
+        user_name="New Name",
+        email="test@example.com",
+        department="IT",
+        role="admin",
+    )
+
+    async def mock_get_user_by_email(*args, **kwargs):
+        return existing_user
 
     monkeypatch.setattr(
         user_service,
         "get_user_by_email",
-        AsyncMock(return_value=existing_user),
+        mock_get_user_by_email
     )
+
+    result = await user_service.create_or_update_user(session, payload)
+
+    assert result is existing_user
+    assert result.user_name == "New Name"
+    assert result.department == "IT"
+    assert result.role == "admin"
+
+    session.flush.assert_awaited_once()
+    session.add.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_create_or_update_user_creates_new(monkeypatch):
+    session = AsyncMock()
 
     payload = UserCreate(
-        user_id="123e4567e89b12d3a456426614174000",
-        user_name="Updated Name",
-        email="existing@example.com",
-        department="HR",
-        role="Admin",
+        user_id="550e8400-e29b-41d4-a716-446655440111",
+        user_name="New User",
+        email="new@example.com",
+        department="IT",
+        role="user",
     )
 
-    user = await user_service.create_or_update_user(session, payload)
+    async def mock_get_user_by_email(*args, **kwargs):
+        return None
 
-    assert user.user_name == "Updated Name"
-    assert user.department == "HR"
-    assert user.role == "Admin"
-    session.flush.assert_called()
+    monkeypatch.setattr(
+        user_service,
+        "get_user_by_email",
+        mock_get_user_by_email
+    )
+
+    result = await user_service.create_or_update_user(session, payload)
+
+    assert result.email == "new@example.com"
+    assert result.user_name == "New User"
+    assert result.department == "IT"
+    assert result.role == "user"
+
+    session.add.assert_called_once()
+    session.flush.assert_awaited_once()
