@@ -1,50 +1,32 @@
-def _compute_total_score(questions: List[Dict[str, Any]]):
+def _try_parse_json_from_text(text: Any) -> Optional[Dict[str, Any]]:
     """
-    Compute total score from frontend questions.
+    Try to extract the first JSON object from text and parse it.
+    Returns dict if parse succeeds, else None.
     """
-    total = 0
 
-    # ✅ REQUIRED DEFAULTS
-    budget = None
-    project_type = None
-    product_type = None
+    # ✅ FIX 1: already parsed JSON
+    if isinstance(text, dict):
+        return text
 
-    if not isinstance(questions, list):
-        return 0, budget, project_type, product_type
+    # ✅ FIX 2: reject non-string early
+    if not isinstance(text, str) or not text:
+        return None
 
-    for q in questions:
+    # crude extraction: first {...} block
+    start = text.find("{")
+    end = text.rfind("}")
+
+    if start == -1 or end == -1 or end <= start:
         try:
-            if not isinstance(q, dict):
-                continue
-
-            text = q.get("text")
-            if isinstance(text, str):
-                t = text.strip().lower()
-
-                if t.startswith("what is your expected budget"):
-                    budget = q.get("answer")
-
-                elif t.startswith("can you specify your project type"):
-                    project_type = q.get("answer")
-
-                elif text == "Is your project Product related?":
-                    product_type = q.get("answer")
-
-            if q.get("score") is not None:
-                total += int(q.get("score") or 0)
-                continue
-
-            opts = q.get("options") or []
-            if isinstance(opts, list) and opts:
-                first = opts[0]
-                if isinstance(first, dict) and first.get("score") is not None:
-                    total += int(first.get("score") or 0)
-
+            return json.loads(text)
         except Exception:
-            logger.warning(
-                "Could not parse question score, ignoring: %s",
-                q,
-                exc_info=False,
-            )
+            return None
 
-    return int(total), budget, project_type, product_type
+    candidate = text[start : end + 1]
+    try:
+        return json.loads(candidate)
+    except Exception:
+        try:
+            return json.loads(text)
+        except Exception:
+            return None
