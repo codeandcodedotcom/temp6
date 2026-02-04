@@ -1,136 +1,161 @@
+import uuid
 import pytest
-from unittest.mock import AsyncMock, MagicMock
-from datetime import datetime
+from unittest.mock import MagicMock, patch
 
-from app.services import user_service
-from app.schemas import User
-from app.models.pydantic_models import UserCreate
+from fastapi import FastAPI
+from fastapi.testclient import TestClient
 
-
-# ------------------------------------------------------------------
-# get_user_by_email
-# ------------------------------------------------------------------
-
-@pytest.mark.asyncio
-async def test_get_user_by_email_found():
-    session = AsyncMock()
-
-    dummy_user = User(
-        user_id="550e8400-e29b-41d4-a716-446655440000",
-        user_name="Test User",
-        email="test@example.com",
-        department="IT",
-        role="admin",
-        created_at=datetime.utcnow(),
-        updated_at=datetime.utcnow(),
-    )
-
-    # result.scalars().first() chain
-    scalars = MagicMock()
-    scalars.first.return_value = dummy_user
-
-    result = MagicMock()
-    result.scalars.return_value = scalars
-
-    session.execute.return_value = result
-
-    user = await user_service.get_user_by_email(session, "test@example.com")
-
-    assert user == dummy_user
-    session.execute.assert_called_once()
+from app.api.generation import router
+from app.models.pydantic_models import AskRequest
 
 
-@pytest.mark.asyncio
-async def test_get_user_by_email_not_found():
-    session = AsyncMock()
+# -------------------------------------------------------------------
+# Test app + client (correct FastAPI usage)
+# -------------------------------------------------------------------
 
-    scalars = MagicMock()
-    scalars.first.return_value = None
-
-    result = MagicMock()
-    result.scalars.return_value = scalars
-
-    session.execute.return_value = result
-
-    user = await user_service.get_user_by_email(session, "missing@example.com")
-
-    assert user is None
-    session.execute.assert_called_once()
+@pytest.fixture(scope="module")
+def client():
+    app = FastAPI()
+    app.include_router(router)
+    return TestClient(app)
 
 
-# ------------------------------------------------------------------
-# create_or_update_user
-# ------------------------------------------------------------------
+# -------------------------------------------------------------------
+# Helpers
+# -------------------------------------------------------------------
 
-@pytest.mark.asyncio
-async def test_create_or_update_user_updates_existing(monkeypatch):
-    session = AsyncMock()
+def valid_payload_dict():
+    return {
+        "user_id": str(uuid.UUID("550e8400-e29b-41d4-a716-446655440000")),
+        "projectTitle": "Test Project",
+        "projectCategory": "IT",
+        "timeline": "1 year",
+        "projectSponsor": "Sponsor",
+        "projectDescription": "Description",
+        "questions": [
+            {
+                "qid": "q1",
+                "text": "Q1",
+                "aid": "a1",
+                "answer": "A1",
+                "score": 10,
+            }
+        ],
+        "totalScore": 10,
+    }
 
-    existing_user = User(
-        user_id="550e8400-e29b-41d4-a716-446655440000",
-        user_name="Old Name",
-        email="test@example.com",
-        department="Old Dept",
-        role="user",
-        created_at=datetime.utcnow(),
-        updated_at=datetime.utcnow(),
-    )
 
-    payload = UserCreate(
-        user_id="550e8400-e29b-41d4-a716-446655440000",
-        user_name="New Name",
-        email="test@example.com",
-        department="IT",
-        role="admin",
-    )
+# -------------------------------------------------------------------
+# Tests
+# -------------------------------------------------------------------
 
-    async def mock_get_user_by_email(*args, **kwargs):
-        return existing_user
-
+def test_ask_route_success(client, monkeypatch):
     monkeypatch.setattr(
-        user_service,
-        "get_user_by_email",
-        mock_get_user_by_email
+        "app.api.generation.get_llm_answer",
+        lambda **_: {"timeline": {}, "objectives": []},
     )
-
-    result = await user_service.create_or_update_user(session, payload)
-
-    assert result is existing_user
-    assert result.user_name == "New Name"
-    assert result.department == "IT"
-    assert result.role == "admin"
-
-    session.flush.assert_awaited_once()
-    session.add.assert_not_called()
-
-
-@pytest.mark.asyncio
-async def test_create_or_update_user_creates_new(monkeypatch):
-    session = AsyncMock()
-
-    payload = UserCreate(
-        user_id="550e8400-e29b-41d4-a716-446655440111",
-        user_name="New User",
-        email="new@example.com",
-        department="IT",
-        role="user",
-    )
-
-    async def mock_get_user_by_email(*args, **kwargs):
-        return None
-
+    monkeypatch.setattr("app.api.generation.scoring", MagicMock())
+    monkeypatch.setattr("app.api.generation.set_databricks_env", lambda: None)
     monkeypatch.setattr(
-        user_service,
-        "get_user_by_email",
-        mock_get_user_by_email
+        "app.api.generation.get_project_search_tool",
+        lambda *_, **__: lambda x: [],
+    )
+    monkeypatch.setattr("app.api.generation.get_par", lambda: "")
+    monkeypatch.setattr("app.api.generation.get_pillm", lambda: "")
+    monkeypatch.setattr(
+        "app.api.generation.generate_charter_pdf",
+        lambda *_, **__: "dummy.pdf",
+    )
+    monkeypatch.setattr(
+        "app.api.generation.create_project",
+        lambda **_: MagicMock(project_id="pid"),
+    )
+    monkeypatch.setattr("app.api.generation.create_answers", lambda **_: None)
+    monkeypatch.setattr(
+        "app.api.generation.create_charter",
+        lambda **_: MagicMock(charter_id="cid"),
+    )
+    monkeypatch.setattr(
+        "app.api.generation.create_charter_sections",
+        lambda **_: None,
+    )
+    monkeypatch.setattr(
+        "app.api.generation.create_charter_version",
+        lambda **_: None,
     )
 
-    result = await user_service.create_or_update_user(session, payload)
+    with patch("app.api.generation.AsyncSession", return_value=MagicMock()):
+        response = client.post(
+            "/generation/ask",
+            json=valid_payload_dict(),
+        )
 
-    assert result.email == "new@example.com"
-    assert result.user_name == "New User"
-    assert result.department == "IT"
-    assert result.role == "user"
+    assert response.status_code == 200
+    body = response.json()
+    assert "charter_pdf_url" in body
 
-    session.add.assert_called_once()
-    session.flush.assert_awaited_once()
+
+def test_ask_route_invalid_json(client):
+    response = client.post(
+        "/generation/ask",
+        data="not a json",
+        headers={"Content-Type": "application/json"},
+    )
+
+    assert response.status_code == 422
+
+
+def test_ask_route_missing_questions(client):
+    payload = valid_payload_dict()
+    payload.pop("questions")
+
+    response = client.post("/generation/ask", json=payload)
+
+    assert response.status_code == 422
+    errors = response.json()["detail"]
+    assert any(err["loc"][-1] == "questions" for err in errors)
+
+
+def test_ask_route_llm_timeout(client, monkeypatch):
+    monkeypatch.setattr(
+        "app.api.generation.get_llm_answer",
+        lambda **_: (_ for _ in ()).throw(Exception("LLM timeout")),
+    )
+    monkeypatch.setattr("app.api.generation.scoring", MagicMock())
+    monkeypatch.setattr("app.api.generation.set_databricks_env", lambda: None)
+    monkeypatch.setattr(
+        "app.api.generation.get_project_search_tool",
+        lambda *_, **__: lambda x: [],
+    )
+    monkeypatch.setattr("app.api.generation.get_par", lambda: "")
+    monkeypatch.setattr("app.api.generation.get_pillm", lambda: "")
+    monkeypatch.setattr(
+        "app.api.generation.generate_charter_pdf",
+        lambda *_, **__: "dummy.pdf",
+    )
+    monkeypatch.setattr(
+        "app.api.generation.create_project",
+        lambda **_: MagicMock(project_id="pid"),
+    )
+    monkeypatch.setattr("app.api.generation.create_answers", lambda **_: None)
+    monkeypatch.setattr(
+        "app.api.generation.create_charter",
+        lambda **_: MagicMock(charter_id="cid"),
+    )
+    monkeypatch.setattr(
+        "app.api.generation.create_charter_sections",
+        lambda **_: None,
+    )
+    monkeypatch.setattr(
+        "app.api.generation.create_charter_version",
+        lambda **_: None,
+    )
+
+    with patch("app.api.generation.AsyncSession", return_value=MagicMock()):
+        response = client.post(
+            "/generation/ask",
+            json=valid_payload_dict(),
+        )
+
+    assert response.status_code in (502, 504)
+    assert "LLM" in response.json()["detail"]
