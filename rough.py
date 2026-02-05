@@ -1,98 +1,154 @@
+import json
+import pandas as pd
+from unittest.mock import MagicMock
 import pytest
-from unittest.mock import MagicMock, patch
 
-import app.utils.lessons_learnt as lessons_learnt
-
-
-# ------------------------------------------------------------------
-# _is_transient (PRIVATE FUNCTION — TEST DIRECTLY)
-# ------------------------------------------------------------------
-
-def test__is_transient_with_http_status():
-    class FakeError(Exception):
-        response = MagicMock(status_code=503)
-
-    assert lessons_learnt._is_transient(FakeError()) is True
+import app.utils.get_par_content as par_content
 
 
-def test__is_transient_with_timeout_message():
-    err = Exception("Request timeout occurred")
-    assert lessons_learnt._is_transient(err) is True
+# -------------------------
+# Helpers
+# -------------------------
+
+class DummyConn:
+    def __enter__(self):
+        return self
+
+    def __exit__(self, exc_type, exc, tb):
+        return False
 
 
-def test__is_transient_false_for_non_transient():
-    err = Exception("validation failed")
-    assert lessons_learnt._is_transient(err) is False
+# -------------------------
+# Tests
+# -------------------------
 
-
-# ------------------------------------------------------------------
-# get_endpoint_ready
-# ------------------------------------------------------------------
-
-@patch("app.utils.lessons_learnt.VectorSearchClient")
-def test_get_endpoint_ready_success(mock_client):
-    mock_index = MagicMock()
-    mock_client.return_value.get_index.return_value = mock_index
-
-    lessons_learnt.get_endpoint_ready(
-        endpoint_name="endpoint",
-        index_name="index",
-        timeout=5,
+def test_get_par_success(monkeypatch):
+    # Mock env setup
+    monkeypatch.setattr(
+        "app.utils.get_par_content.set_databricks_env",
+        lambda: None,
     )
 
-    mock_client.return_value.wait_for_endpoint.assert_called_once()
-    mock_index.wait_until_ready.assert_called_once()
+    # Mock env vars
+    monkeypatch.setenv("DATABRICKS_HOST", "host")
+    monkeypatch.setenv("DATABRICKS_TOKEN", "token")
+
+    # Mock SQL connect
+    monkeypatch.setattr(
+        "app.utils.get_par_content.sql.connect",
+        lambda **kwargs: DummyConn(),
+    )
+
+    # Fake dataframe
+    df = pd.DataFrame(
+        {
+            "Gate": ["Gate 1", "Gate 2", "Gate 3"],
+            "Content": ["C1", "C2", "C3"],
+        }
+    )
+
+    monkeypatch.setattr(
+        "app.utils.get_par_content.pd.read_sql",
+        lambda query, conn: df,
+    )
+
+    result = par_content.get_par()
+    parsed = json.loads(result)
+
+    assert isinstance(parsed, list)
+    assert len(parsed) > 0
+
+    # Verify structure
+    for section in parsed:
+        assert "Section" in section
+        assert "GateContent" in section
+        assert isinstance(section["GateContent"], list)
 
 
-@patch("app.utils.lessons_learnt.VectorSearchClient")
-def test_get_endpoint_ready_failure(mock_client):
-    mock_client.return_value.wait_for_endpoint.side_effect = Exception("boom")
+def test_get_par_empty_dataframe(monkeypatch):
+    monkeypatch.setattr(
+        "app.utils.get_par_content.set_databricks_env",
+        lambda: None,
+    )
 
-    with pytest.raises(Exception):
-        lessons_learnt.get_endpoint_ready("endpoint", "index")
+    monkeypatch.setenv("DATABRICKS_HOST", "host")
+    monkeypatch.setenv("DATABRICKS_TOKEN", "token")
+
+    monkeypatch.setattr(
+        "app.utils.get_par_content.sql.connect",
+        lambda **kwargs: DummyConn(),
+    )
+
+    empty_df = pd.DataFrame(columns=["Gate", "Content"])
+
+    monkeypatch.setattr(
+        "app.utils.get_par_content.pd.read_sql",
+        lambda query, conn: empty_df,
+    )
+
+    result = par_content.get_par()
+    parsed = json.loads(result)
+
+    # All sections should exist but have empty GateContent
+    for section in parsed:
+        assert section["GateContent"] == []
 
 
-# ------------------------------------------------------------------
-# get_project_search_tool + retrieve (CLOSURE-AWARE TESTING)
-# ------------------------------------------------------------------
+def test_get_par_multiple_rows_same_gate(monkeypatch):
+    monkeypatch.setattr(
+        "app.utils.get_par_content.set_databricks_env",
+        lambda: None,
+    )
 
-@patch("app.utils.lessons_learnt.get_endpoint_ready")
-@patch("app.utils.lessons_learnt.DatabricksVectorSearch")
-def test_retrieve_success(mock_vs, mock_ready):
-    fake_store = MagicMock()
-    fake_store.similarity_search_with_score.return_value = [("doc", 0.1)]
-    mock_vs.return_value = fake_store
+    monkeypatch.setenv("DATABRICKS_HOST", "host")
+    monkeypatch.setenv("DATABRICKS_TOKEN", "token")
 
-    retrieve = lessons_learnt.get_project_search_tool("index", "endpoint")
-    result = retrieve("project description", top_k=1)
+    monkeypatch.setattr(
+        "app.utils.get_par_content.sql.connect",
+        lambda **kwargs: DummyConn(),
+    )
 
-    assert result == [("doc", 0.1)]
+    df = pd.DataFrame(
+        {
+            "Gate": ["Gate 1", "Gate 1", "Gate 2"],
+            "Content": ["C1", "C1b", "C2"],
+        }
+    )
 
+    monkeypatch.setattr(
+        "app.utils.get_par_content.pd.read_sql",
+        lambda query, conn: df,
+    )
 
-@patch("app.utils.lessons_learnt.get_endpoint_ready")
-@patch("app.utils.lessons_learnt.DatabricksVectorSearch")
-def test_retrieve_retry_then_success(mock_vs, mock_ready):
-    fake_store = MagicMock()
-    fake_store.similarity_search_with_score.side_effect = [
-        Exception("timeout"),
-        [("doc", 0.2)],
+    result = par_content.get_par()
+    parsed = json.loads(result)
+
+    gate1_sections = [
+        s for s in parsed if "Gate 1" in s["Section"].lower()
     ]
-    mock_vs.return_value = fake_store
 
-    retrieve = lessons_learnt.get_project_search_tool("index", "endpoint")
-    result = retrieve("project description", top_k=1)
-
-    assert result == [("doc", 0.2)]
+    assert gate1_sections
+    assert len(gate1_sections[0]["GateContent"]) == 2
 
 
-@patch("app.utils.lessons_learnt.get_endpoint_ready")
-@patch("app.utils.lessons_learnt.DatabricksVectorSearch")
-def test_retrieve_fails_after_retries(mock_vs, mock_ready):
-    fake_store = MagicMock()
-    fake_store.similarity_search_with_score.side_effect = Exception("timeout")
-    mock_vs.return_value = fake_store
+def test_get_par_sql_failure(monkeypatch):
+    monkeypatch.setattr(
+        "app.utils.get_par_content.set_databricks_env",
+        lambda: None,
+    )
 
-    retrieve = lessons_learnt.get_project_search_tool("index", "endpoint")
+    monkeypatch.setenv("DATABRICKS_HOST", "host")
+    monkeypatch.setenv("DATABRICKS_TOKEN", "token")
+
+    monkeypatch.setattr(
+        "app.utils.get_par_content.sql.connect",
+        lambda **kwargs: DummyConn(),
+    )
+
+    monkeypatch.setattr(
+        "app.utils.get_par_content.pd.read_sql",
+        lambda query, conn: (_ for _ in ()).throw(Exception("sql failed")),
+    )
 
     with pytest.raises(Exception):
-        retrieve("project description", top_k=1)
+        par_content.get_par()
