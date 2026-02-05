@@ -1,122 +1,85 @@
 import pytest
-from fastapi.testclient import TestClient
-from unittest.mock import AsyncMock, MagicMock
-from fastapi import FastAPI
+import json
+import pathlib
+from unittest.mock import patch, MagicMock
 
-from app.db.services import add_options_data as options_module
-from app.db.services.add_options_data import router
-
-
-# --------------------
-# FastAPI test app
-# --------------------
-app = FastAPI()
-app.include_router(router)
-client = TestClient(app)
+# --------------------------------------------------
+# CRITICAL: patch config BEFORE importing auth module
+# --------------------------------------------------
+with patch("configparser.ConfigParser.get", return_value="testhost"):
+    from app.authentication.databricks_auth import DatabricksAuth, main
 
 
-# --------------------
-# Helper: mock DB session
-# --------------------
-def make_mock_session(existing_record=None, raise_on_execute=False):
-    session = MagicMock()
-
-    if raise_on_execute:
-        session.execute = AsyncMock(side_effect=Exception("db error"))
-    else:
-        result = MagicMock()
-        result.scalar_one_or_none.return_value = existing_record
-        session.execute = AsyncMock(return_value=result)
-
-    session.commit = AsyncMock()
-    session.rollback = AsyncMock()
-    return session
+# ==================================================
+# INIT TEST
+# ==================================================
+def test_init_reads_config():
+    with patch("configparser.ConfigParser.read") as mock_read:
+        auth = DatabricksAuth()
+        mock_read.assert_called()
+        assert hasattr(auth, "config")
+        assert auth.token == ""
 
 
-# =========================================================
-# ADD PATH — option does NOT exist
-# =========================================================
-@pytest.mark.asyncio
-def test_seed_questionnaire_options_add():
-    mock_session = make_mock_session(existing_record=None)
+# ==================================================
+# GET TOKEN — SUCCESS
+# ==================================================
+@patch("subprocess.run")
+@patch("pathlib.Path.home")
+@patch("builtins.open")
+@patch("configparser.ConfigParser.set")
+@patch("configparser.ConfigParser.write")
+def test_get_token_success(
+    mock_write,
+    mock_set,
+    mock_open,
+    mock_home,
+    mock_run,
+):
+    auth = DatabricksAuth()
 
-    app.dependency_overrides[
-        options_module.get_db_session
-    ] = lambda: mock_session
+    token_json = json.dumps({
+        "tokens": {
+            "testhost": {
+                "access_token": "abc123"
+            }
+        }
+    })
 
-    options = [{
-        "option_id": 1,
-        "question_id": 1,
-        "option_key": "A",
-        "option_text": "Option A",
-        "option_score": 1,
-        "order_index": 1
-    }]
+    mock_path = MagicMock()
+    mock_path.read_text.return_value = token_json
+    mock_home.return_value = pathlib.Path("/mockhome")
 
-    response = client.post("/questionnaire/options/seed", json=options)
+    with patch("pathlib.Path.read_text", return_value=token_json):
+        auth.get_token()
 
-    assert response.status_code == 200
-    assert response.json()["added"] == 1
-    assert response.json()["updated"] == 0
-    assert response.json()["total"] == 1
-
-    app.dependency_overrides.clear()
-
-
-# =========================================================
-# UPDATE PATH — option already exists
-# =========================================================
-@pytest.mark.asyncio
-def test_seed_questionnaire_options_update():
-    existing_record = MagicMock()
-    mock_session = make_mock_session(existing_record=existing_record)
-
-    app.dependency_overrides[
-        options_module.get_db_session
-    ] = lambda: mock_session
-
-    options = [{
-        "option_id": 1,
-        "question_id": 1,
-        "option_key": "A",
-        "option_text": "Updated Option A",
-        "option_score": 2,
-        "order_index": 1
-    }]
-
-    response = client.post("/questionnaire/options/seed", json=options)
-
-    assert response.status_code == 200
-    assert response.json()["added"] == 0
-    assert response.json()["updated"] == 1
-    assert response.json()["total"] == 1
-
-    app.dependency_overrides.clear()
+    mock_run.assert_called()
+    mock_set.assert_called()
+    mock_write.assert_called()
+    assert auth.token == "abc123"
 
 
-# =========================================================
-# ERROR PATH — DB failure
-# =========================================================
-@pytest.mark.asyncio
-def test_seed_questionnaire_options_error():
-    mock_session = make_mock_session(raise_on_execute=True)
+# ==================================================
+# GET TOKEN — SUBPROCESS ERROR
+# ==================================================
+@patch("subprocess.run", side_effect=Exception("fail"))
+def test_get_token_subprocess_error(mock_run):
+    auth = DatabricksAuth()
 
-    app.dependency_overrides[
-        options_module.get_db_session
-    ] = lambda: mock_session
+    with pytest.raises(Exception):
+        auth.get_token()
 
-    options = [{
-        "option_id": 1,
-        "question_id": 1,
-        "option_key": "A",
-        "option_text": "Option A",
-        "option_score": 1,
-        "order_index": 1
-    }]
 
-    response = client.post("/questionnaire/options/seed", json=options)
-
-    assert response.status_code == 500
-    assert "Failed to seed options" in response.text
-
-    app.dependency_overrides.clear()
+# ==================================================
+# MAIN CALLS GET_TOKEN
+# ==================================================
+def test_main_calls_get_token():
+    with patch(
+        "app.authentication.databricks_auth.DatabricksAuth.get_token"
+    ) as mock_get_token:
+        with patch(
+            "app.authentication.databricks_auth.DatabricksAuth.__init__",
+            return_value=None
+        ):
+            main()
+            mock_get_token.assert_called()
