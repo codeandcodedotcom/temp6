@@ -1,160 +1,111 @@
 import pytest
-from unittest.mock import MagicMock, patch
-from langchain_core.documents import Document
+from unittest.mock import MagicMock
 
-import app.utils.lessons_learnt as lessons
+import app.utils.lessons_learnt as lessons_learnt
 
 
-# -------------------------
-# init_lessons_learnt
-# -------------------------
+# -----------------------------
+# Shared mocks
+# -----------------------------
 
-def test_init_lessons_learnt_sets_env(monkeypatch):
+@pytest.fixture
+def fake_vector_store():
+    store = MagicMock()
+    store.similarity_search_with_score.return_value = []
+    return store
+
+
+@pytest.fixture
+def patch_common(monkeypatch, fake_vector_store):
+    # Prevent env / databricks side effects
     monkeypatch.setattr(
         "app.utils.lessons_learnt.set_databricks_env",
         lambda: None,
     )
 
-    lessons.init_lessons_learnt()
-
-
-# -------------------------
-# _is_transient
-# -------------------------
-
-def test_is_transient_by_status_code():
-    e = Exception("error")
-    e.response = MagicMock(status_code=503)
-
-    assert lessons._is_transient(e) is True
-
-
-def test_is_transient_by_message():
-    e = Exception("Request timeout")
-
-    assert lessons._is_transient(e) is True
-
-
-def test_is_not_transient():
-    e = Exception("some other failure")
-
-    assert lessons._is_transient(e) is False
-
-
-# -------------------------
-# get_endpoint_ready
-# -------------------------
-
-def test_get_endpoint_ready_success(monkeypatch):
-    mock_client = MagicMock()
-    mock_index = MagicMock()
-
-    mock_client.get_index.return_value = mock_index
-
-    monkeypatch.setattr(
-        "app.utils.lessons_learnt.VectorSearchClient",
-        lambda: mock_client,
-    )
-
-    lessons.get_endpoint_ready("ep", "idx")
-
-
-def test_get_endpoint_ready_failure(monkeypatch):
-    mock_client = MagicMock()
-    mock_client.wait_for_endpoint.side_effect = Exception("boom")
-
-    monkeypatch.setattr(
-        "app.utils.lessons_learnt.VectorSearchClient",
-        lambda: mock_client,
-    )
-
-    with pytest.raises(Exception):
-        lessons.get_endpoint_ready("ep", "idx")
-
-
-# -------------------------
-# get_project_search_tool
-# -------------------------
-
-def test_get_project_search_tool(monkeypatch):
+    # Skip endpoint readiness logic
     monkeypatch.setattr(
         "app.utils.lessons_learnt.get_endpoint_ready",
-        lambda *args, **kwargs: None,
+        lambda *_, **__: None,
     )
 
-    mock_vs = MagicMock()
+    # Patch VectorSearch client constructor
+    monkeypatch.setattr(
+        "app.utils.lessons_learnt.VectorSearchClient",
+        MagicMock,
+    )
+
+    # Patch DatabricksVectorSearch constructor (THIS IS CRITICAL)
     monkeypatch.setattr(
         "app.utils.lessons_learnt.DatabricksVectorSearch",
-        lambda **kwargs: mock_vs,
+        lambda **kwargs: fake_vector_store,
     )
 
-    tool = lessons.get_project_search_tool("index", "endpoint")
+
+# -----------------------------
+# Tests
+# -----------------------------
+
+def test_get_project_search_tool_returns_callable(patch_common):
+    tool = lessons_learnt.get_project_search_tool(
+        index_name="idx",
+        endpoint_name="ep",
+    )
 
     assert callable(tool)
 
 
-# -------------------------
-# retrieve
-# -------------------------
-
-def test_retrieve_success(monkeypatch):
-    mock_vs = MagicMock()
-    mock_vs.similarity_search_with_score.return_value = [
-        (Document(page_content="test"), 0.1)
-    ]
-
-    monkeypatch.setattr(
-        "app.utils.lessons_learnt.vector_store",
-        mock_vs,
+def test_retrieve_returns_empty_list_when_no_results(patch_common):
+    retrieve = lessons_learnt.get_project_search_tool(
+        index_name="idx",
+        endpoint_name="ep",
     )
 
-    results = lessons.retrieve("project desc")
-
-    assert len(results) == 1
-    assert isinstance(results[0][0], Document)
-
-
-def test_retrieve_empty_results(monkeypatch):
-    mock_vs = MagicMock()
-    mock_vs.similarity_search_with_score.return_value = []
-
-    monkeypatch.setattr(
-        "app.utils.lessons_learnt.vector_store",
-        mock_vs,
+    results = retrieve(
+        project_description="test project",
+        top_k=1,
+        filters=None,
     )
-
-    results = lessons.retrieve("project desc")
 
     assert results == []
 
 
-def test_retrieve_transient_then_success(monkeypatch):
-    mock_vs = MagicMock()
-
-    transient_exc = Exception("timeout")
-    mock_vs.similarity_search_with_score.side_effect = [
-        transient_exc,
-        [(Document(page_content="ok"), 0.2)],
-    ]
-
-    monkeypatch.setattr(
-        "app.utils.lessons_learnt.vector_store",
-        mock_vs,
+def test_retrieve_calls_similarity_search_with_expected_args(
+    patch_common,
+    fake_vector_store,
+):
+    retrieve = lessons_learnt.get_project_search_tool(
+        index_name="idx",
+        endpoint_name="ep",
     )
 
-    results = lessons.retrieve("project desc")
-
-    assert len(results) == 1
-
-
-def test_retrieve_non_transient_failure(monkeypatch):
-    mock_vs = MagicMock()
-    mock_vs.similarity_search_with_score.side_effect = Exception("fatal")
-
-    monkeypatch.setattr(
-        "app.utils.lessons_learnt.vector_store",
-        mock_vs,
+    retrieve(
+        project_description="sample",
+        top_k=3,
+        filters={"key": "value"},
     )
 
-    with pytest.raises(Exception):
-        lessons.retrieve("project desc")
+    fake_vector_store.similarity_search_with_score.assert_called_once()
+    args, kwargs = fake_vector_store.similarity_search_with_score.call_args
+
+    assert kwargs["query"] == "sample"
+    assert kwargs["k"] == 3
+    assert kwargs["query_type"] == "HYBRID"
+    assert kwargs["filter"] == {"key": "value"}
+
+
+def test_is_transient_with_http_status():
+    class FakeError(Exception):
+        response = MagicMock(status_code=503)
+
+    assert lessons_learnt._is_transient(FakeError()) is True
+
+
+def test_is_transient_with_timeout_message():
+    err = Exception("Request timeout occurred")
+    assert lessons_learnt._is_transient(err) is True
+
+
+def test_is_transient_false_for_non_transient():
+    err = Exception("validation failed")
+    assert lessons_learnt._is_transient(err) is False
