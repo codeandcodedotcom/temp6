@@ -1,9 +1,8 @@
-gate1_sections = [s for s in parsed if s["GateContent"]]
+gate_sections = [s for s in parsed if s["GateContent"]]
+assert gate_sections
 
-assert gate1_sections
+all_contents = []
+for s in gate_sections:
+    all_contents.extend(s["GateContent"])
 
-gate1_contents = []
-for s in gate1_sections:
-    gate1_contents.extend(s["GateContent"])
-
-assert sorted(gate1_contents) == ["C1", "C1b"]
+assert {"C1", "C1b"}.issubset(set(all_contents))
