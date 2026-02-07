@@ -1,71 +1,119 @@
-def __compute_total_score(questions: List[Dict[str, Any]]):
-    """
-    Compute total score from frontend questions.
-    """
-    if not isinstance(questions, list):
-        return 0, None, None, None
-
-    total = 0
-    budget = None
-    project_type = None
-    product_type = None
-
-    for q in questions:
-        score, budget, project_type, product_type = _process_question(
-            q, budget, project_type, product_type
-        )
-        total += score
-
-    return int(total), budget, project_type, product_type
+import pytest
+from app.api.generation import _compute_total_score
 
 
-def _process_question(q, budget, project_type, product_type):
-    if not isinstance(q, dict):
-        return 0, budget, project_type, product_type
-
-    try:
-        _extract_metadata(q, lambda b: locals().update(b))
-        score = _extract_score(q)
-        budget, project_type, product_type = _extract_text_answers(
-            q, budget, project_type, product_type
-        )
-        return score, budget, project_type, product_type
-
-    except Exception:
-        logger.warning(
-            "Could not parse question score, ignoring: %s",
-            q,
-            exc_info=False,
-        )
-        return 0, budget, project_type, product_type
+def test_empty_questions():
+    total, budget, project_type, product_type = _compute_total_score([])
+    assert total == 0
+    assert budget is None
+    assert project_type is None
+    assert product_type is None
 
 
-def _extract_score(q: dict) -> int:
-    if q.get("score") is not None:
-        return int(q.get("score") or 0)
-
-    opts = q.get("options") or []
-    if isinstance(opts, list) and opts:
-        first = opts[0]
-        if isinstance(first, dict) and first.get("score") is not None:
-            return int(first.get("score") or 0)
-
-    return 0
+def test_non_list_input():
+    total, budget, project_type, product_type = _compute_total_score("invalid")
+    assert total == 0
+    assert budget is None
+    assert project_type is None
+    assert product_type is None
 
 
-def _extract_text_answers(q, budget, project_type, product_type):
-    text = q.get("text")
-    if not isinstance(text, str):
-        return budget, project_type, product_type
+def test_direct_score_present():
+    questions = [
+        {"score": 5},
+        {"score": 3},
+    ]
+    total, *_ = _compute_total_score(questions)
+    assert total == 8
 
-    t = text.strip().lower()
-    answer = q.get("answer")
 
-    if t.startswith("what is your expected budget"):
-        budget = answer
-    elif t.startswith("can you specify your project type"):
-        project_type = answer
-    elif t == "is your project timeline flexible?":
-        product_type = answer
+def test_score_as_string():
+    questions = [
+        {"score": "4"},
+    ]
+    total, *_ = _compute_total_score(questions)
+    assert total == 4
 
-    return budget, project_type, product_type
+
+def test_options_score_used_when_score_missing():
+    questions = [
+        {
+            "options": [
+                {"score": 6}
+            ]
+        }
+    ]
+    total, *_ = _compute_total_score(questions)
+    assert total == 6
+
+
+def test_invalid_question_structure_is_ignored():
+    questions = [
+        {"score": 5},
+        "invalid",
+        None,
+        {"options": "wrong"},
+    ]
+    total, *_ = _compute_total_score(questions)
+    assert total == 5
+
+
+def test_budget_extraction():
+    questions = [
+        {
+            "text": "What is your expected budget?",
+            "answer": "10000"
+        }
+    ]
+    _, budget, _, _ = _compute_total_score(questions)
+    assert budget == "10000"
+
+
+def test_project_type_extraction():
+    questions = [
+        {
+            "text": "Can you specify your project type?",
+            "answer": "Web App"
+        }
+    ]
+    _, _, project_type, _ = _compute_total_score(questions)
+    assert project_type == "Web App"
+
+
+def test_product_type_extraction():
+    questions = [
+        {
+            "text": "Is your project product related?",
+            "answer": "Yes"
+        }
+    ]
+    _, _, _, product_type = _compute_total_score(questions)
+    assert product_type == "Yes"
+
+
+def test_mixed_questions_all_paths():
+    questions = [
+        {"score": 2},
+        {
+            "options": [{"score": 3}]
+        },
+        {
+            "text": "What is your expected budget?",
+            "answer": "5000"
+        },
+        {
+            "text": "Can you specify your project type?",
+            "answer": "Mobile"
+        },
+        {
+            "text": "Is your project product related?",
+            "answer": "No"
+        }
+    ]
+
+    total, budget, project_type, product_type = _compute_total_score(questions)
+
+    assert total == 5
+    assert budget == "5000"
+    assert project_type == "Mobile"
+    assert product_type == "No"
