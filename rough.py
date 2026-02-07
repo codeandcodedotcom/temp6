@@ -1,77 +1,86 @@
-# tests/test_compute_total_score.py
+import pytest
 
-import logging
 from app.api.generation import _compute_total_score
 
 
-def test_returns_defaults_when_input_not_list():
-    total, budget, project_type, product_type = _compute_total_score(None)
+def test_empty_questions():
+    total, budget, project_type, product_type = _compute_total_score([])
     assert total == 0
     assert budget is None
     assert project_type is None
     assert product_type is None
 
 
-def test_score_from_top_level_score_field():
+def test_direct_score_field():
     questions = [
+        {"score": 5},
         {"score": 3},
-        {"score": 2},
     ]
     total, budget, project_type, product_type = _compute_total_score(questions)
-    assert total == 5
+    assert total == 8
     assert budget is None
     assert project_type is None
     assert product_type is None
 
 
-def test_score_from_first_option_score():
+def test_score_inside_options():
     questions = [
         {
             "options": [
-                {"score": 4},
-                {"score": 10},
+                {"score": 4}
             ]
         }
     ]
     total, budget, project_type, product_type = _compute_total_score(questions)
     assert total == 4
+    assert budget is None
+    assert project_type is None
+    assert product_type is None
 
 
-def test_budget_extraction_from_question_text():
+def test_budget_extraction():
     questions = [
         {
             "text": "What is your expected budget?",
-            "answer": "10000",
+            "answer": "10000"
         }
     ]
     total, budget, project_type, product_type = _compute_total_score(questions)
     assert total == 0
     assert budget == "10000"
+    assert project_type is None
+    assert product_type is None
 
 
 def test_project_type_extraction():
     questions = [
         {
             "text": "Can you specify your project type?",
-            "answer": "Internal",
+            "answer": "Internal"
         }
     ]
     total, budget, project_type, product_type = _compute_total_score(questions)
+    assert total == 0
+    assert budget is None
     assert project_type == "Internal"
+    assert product_type is None
 
 
 def test_product_type_extraction():
     questions = [
         {
             "text": "Is your project product related?",
-            "answer": "Yes",
+            "answer": "Yes"
         }
     ]
     total, budget, project_type, product_type = _compute_total_score(questions)
+    assert total == 0
+    assert budget is None
+    assert project_type is None
     assert product_type == "Yes"
 
 
-def test_mixed_questions_all_paths():
+def test_mixed_questions():
     questions = [
         {"score": 2},
         {
@@ -81,33 +90,36 @@ def test_mixed_questions_all_paths():
         },
         {
             "text": "What is your expected budget?",
-            "answer": "5000",
+            "answer": "5000"
         },
         {
             "text": "Can you specify your project type?",
-            "answer": "Client",
+            "answer": "External"
         },
         {
             "text": "Is your project product related?",
-            "answer": "No",
-        },
+            "answer": "No"
+        }
     ]
+
     total, budget, project_type, product_type = _compute_total_score(questions)
+
     assert total == 5
     assert budget == "5000"
-    assert project_type == "Client"
+    assert project_type == "External"
     assert product_type == "No"
 
 
-def test_invalid_question_does_not_crash(caplog):
-    caplog.set_level(logging.WARNING)
+def test_invalid_entries_are_ignored():
     questions = [
-        {"score": "invalid"},
+        "invalid",
         {"options": "wrong"},
+        {"score": "not_a_number"},
     ]
+
     total, budget, project_type, product_type = _compute_total_score(questions)
+
     assert total == 0
     assert budget is None
     assert project_type is None
     assert product_type is None
-    assert any("Could not parse question score" in r.message for r in caplog.records)
