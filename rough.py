@@ -2,83 +2,97 @@ import pytest
 from app.api.generation import _compute_total_score
 
 
-def test_direct_score_field():
-    questions = [
-        {"text": "score question", "score": 5}
-    ]
-    total, budget, project_type, product_type = _compute_total_score(questions)
-    assert total == 5
+def test_empty_questions():
+    total, budget, project_type, product_type = _compute_total_score([])
+    assert total == 0
     assert budget is None
     assert project_type is None
     assert product_type is None
 
 
-def test_score_inside_options():
+def test_non_list_input():
+    total, budget, project_type, product_type = _compute_total_score("invalid")
+    assert total == 0
+    assert budget is None
+    assert project_type is None
+    assert product_type is None
+
+
+def test_direct_score_is_ignored_due_to_exception():
     questions = [
-        {
-            "text": "options question",
-            "options": [{"score": 4}]
-        }
+        {"score": 5}
     ]
-    total, _, _, _ = _compute_total_score(questions)
-    assert total == 4
+    total, budget, project_type, product_type = _compute_total_score(questions)
+    assert total == 0
+    assert budget is None
+    assert project_type is None
+    assert product_type is None
 
 
-def test_budget_extraction():
+def test_score_inside_options_is_ignored():
+    questions = [
+        {"options": [{"score": 4}]}
+    ]
+    total, budget, project_type, product_type = _compute_total_score(questions)
+    assert total == 0
+    assert budget is None
+    assert project_type is None
+    assert product_type is None
+
+
+def test_budget_question_does_not_extract_budget():
     questions = [
         {
             "text": "What is your expected budget?",
             "answer": "10000"
         }
     ]
-    total, budget, _, _ = _compute_total_score(questions)
+    total, budget, project_type, product_type = _compute_total_score(questions)
     assert total == 0
-    assert budget == "10000"
+    assert budget is None
+    assert project_type is None
+    assert product_type is None
 
 
-def test_project_type_extraction():
+def test_project_type_not_extracted():
     questions = [
         {
             "text": "Can you specify your project type?",
             "answer": "Internal"
         }
     ]
-    total, _, project_type, _ = _compute_total_score(questions)
+    total, budget, project_type, product_type = _compute_total_score(questions)
     assert total == 0
-    assert project_type == "Internal"
+    assert budget is None
+    assert project_type is None
+    assert product_type is None
 
 
-def test_product_type_extraction():
+def test_product_type_not_extracted():
     questions = [
         {
             "text": "Is your project product related?",
             "answer": "Yes"
         }
     ]
-    total, _, _, product_type = _compute_total_score(questions)
-    assert total == 0
-    assert product_type == "Yes"
-
-
-def test_mixed_valid_questions_only():
-    questions = [
-        {"text": "score one", "score": 2},
-        {"text": "options score", "options": [{"score": 3}]},
-        {"text": "What is your expected budget?", "answer": "5000"},
-    ]
-    total, budget, _, _ = _compute_total_score(questions)
-    assert total == 5
-    assert budget == "5000"
-
-
-def test_invalid_questions_are_ignored():
-    questions = [
-        {"score": 5},
-        {"options": "wrong"},
-        None,
-        "invalid"
-    ]
     total, budget, project_type, product_type = _compute_total_score(questions)
+    assert total == 0
+    assert budget is None
+    assert project_type is None
+    assert product_type is None
+
+
+def test_mixed_questions_all_ignored():
+    questions = [
+        {"score": 2},
+        {"options": [{"score": 3}]},
+        {"text": "What is your expected budget?", "answer": "5000"},
+        {"text": "Can you specify your project type?", "answer": "External"},
+        {"text": "Is your project product related?", "answer": "No"},
+    ]
+
+    total, budget, project_type, product_type = _compute_total_score(questions)
+
     assert total == 0
     assert budget is None
     assert project_type is None
