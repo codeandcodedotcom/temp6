@@ -1,31 +1,86 @@
-def _compute_total_score(
-    questions: list[dict[str, any]],
-    frontend_total_score: int | None = None,
-):
-    if not isinstance(questions, list):
-        return 0, None, None, None
+import pytest
+from app.api.generation import _compute_total_score
 
-    total = 0
-    budget = None
-    project_type = None
-    product_type = None
 
-    for q in questions:
-        score, budget, project_type, product_type = _process_question(
-            q, budget, project_type, product_type
-        )
-        total += score
+def test_empty_questions_no_frontend_score():
+    total, budget, project_type, product_type = _compute_total_score([], None)
 
-    # FINAL FALLBACK: use frontend totalScore only if backend failed
-    if (
-        total <= 0
-        and isinstance(frontend_total_score, (int, float))
-        and frontend_total_score > 0
-    ):
-        logger.warning(
-            "Backend score calculation failed. Falling back to frontend totalScore=%s",
-            frontend_total_score,
-        )
-        total = int(frontend_total_score)
+    assert total == 0
+    assert budget is None
+    assert project_type is None
+    assert product_type is None
 
-    return int(total), budget, project_type, product_type
+
+def test_empty_questions_with_frontend_score_fallback():
+    total, budget, project_type, product_type = _compute_total_score([], 42)
+
+    assert total == 42
+    assert budget is None
+    assert project_type is None
+    assert product_type is None
+
+
+def test_backend_score_zero_triggers_frontend_fallback():
+    questions = [
+        {"text": "Can you specify your project type?", "answer": "External"},
+        {"text": "Is your project product related?", "answer": "Yes"},
+    ]
+
+    total, budget, project_type, product_type = _compute_total_score(
+        questions,
+        frontend_total_score=55,
+    )
+
+    assert total == 55
+    assert budget is None
+    assert project_type is None
+    assert product_type is None
+
+
+def test_backend_score_non_zero_does_not_use_frontend_score():
+    questions = [
+        {"score": 10},
+        {"score": 5},
+    ]
+
+    total, budget, project_type, product_type = _compute_total_score(
+        questions,
+        frontend_total_score=99,
+    )
+
+    assert total == 15
+    assert budget is None
+    assert project_type is None
+    assert product_type is None
+
+
+def test_frontend_score_ignored_if_not_number():
+    questions = []
+
+    total, budget, project_type, product_type = _compute_total_score(
+        questions,
+        frontend_total_score="42",  # invalid type
+    )
+
+    assert total == 0
+    assert budget is None
+    assert project_type is None
+    assert product_type is None
+
+
+def test_mixed_questions_backend_zero_uses_frontend():
+    questions = [
+        {"score": 0},
+        {"options": [{"score": 0}]},
+        {"text": "What is your expected budget?", "answer": "5000"},
+    ]
+
+    total, budget, project_type, product_type = _compute_total_score(
+        questions,
+        frontend_total_score=30,
+    )
+
+    assert total == 30
+    assert budget is None
+    assert project_type is None
+    assert product_type is None
