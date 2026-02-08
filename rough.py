@@ -1,5 +1,7 @@
-def _compute_total_score(questions: List[Dict[str, Any]]):
-
+def _compute_total_score(
+    questions: list[dict[str, any]],
+    frontend_total_score: int | None = None,
+):
     if not isinstance(questions, list):
         return 0, None, None, None
 
@@ -8,23 +10,21 @@ def _compute_total_score(questions: List[Dict[str, Any]]):
     project_type = None
     product_type = None
 
-    frontend_total_score = None
-
     for q in questions:
-        # Capture frontend totalScore once if present
-        if frontend_total_score is None and isinstance(q, dict):
-            frontend_total_score = q.get("totalScore")
-
         score, budget, project_type, product_type = _process_question(
             q, budget, project_type, product_type
         )
         total += score
 
-    # 🔥 FINAL FALLBACK LOGIC 🔥
-    if (not total or total <= 0) and isinstance(frontend_total_score, (int, float)):
+    # FINAL FALLBACK: use frontend totalScore only if backend failed
+    if (
+        total <= 0
+        and isinstance(frontend_total_score, (int, float))
+        and frontend_total_score > 0
+    ):
         logger.warning(
             "Backend score calculation failed. Falling back to frontend totalScore=%s",
-            frontend_total_score
+            frontend_total_score,
         )
         total = int(frontend_total_score)
 
