@@ -1,29 +1,31 @@
-from app.api.generation import _try_parse_json_from_text
+def _compute_total_score(questions: List[Dict[str, Any]]):
 
+    if not isinstance(questions, list):
+        return 0, None, None, None
 
-def test_try_parse_json_from_text_dict_passthrough():
-    data = {"a": 1}
-    assert _try_parse_json_from_text(data) == data
+    total = 0
+    budget = None
+    project_type = None
+    product_type = None
 
+    frontend_total_score = None
 
-def test_try_parse_json_from_text_none_input():
-    assert _try_parse_json_from_text(None) is None
+    for q in questions:
+        # Capture frontend totalScore once if present
+        if frontend_total_score is None and isinstance(q, dict):
+            frontend_total_score = q.get("totalScore")
 
+        score, budget, project_type, product_type = _process_question(
+            q, budget, project_type, product_type
+        )
+        total += score
 
-def test_try_parse_json_from_text_invalid_string():
-    assert _try_parse_json_from_text("not json at all") is None
+    # 🔥 FINAL FALLBACK LOGIC 🔥
+    if (not total or total <= 0) and isinstance(frontend_total_score, (int, float)):
+        logger.warning(
+            "Backend score calculation failed. Falling back to frontend totalScore=%s",
+            frontend_total_score
+        )
+        total = int(frontend_total_score)
 
-
-def test_try_parse_json_from_text_plain_json():
-    text = '{"a": 1, "b": 2}'
-    assert _try_parse_json_from_text(text) == {"a": 1, "b": 2}
-
-
-def test_try_parse_json_from_text_embedded_json():
-    text = "some text before {\"x\": 10} some text after"
-    assert _try_parse_json_from_text(text) == {"x": 10}
-
-
-def test_try_parse_json_from_text_malformed_json():
-    text = "{bad json}"
-    assert _try_parse_json_from_text(text) is None
+    return int(total), budget, project_type, product_type
