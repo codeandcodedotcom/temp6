@@ -1,58 +1,88 @@
-def _compute_total_score(questions: list[Dict[str, Any]]):
-    """Compute total score from frontend questions."""
-    total = 0
-    metadata = {'budget': None, 'project_type': None, 'product_type': None}
-    
-    if not isinstance(questions, list):
-        return 0, metadata['budget'], metadata['project_type'], metadata['product_type']
-    
-    for q in questions:
-        try:
-            if not isinstance(q, dict):
-                continue
-            
-            total += _process_question(q, metadata)
-            
-        except Exception:
-            logger.warning(
-                "Could not parse question score, ignoring: %s",
-                q,
-                exc_info=False,
-            )
-    
-    return int(total), metadata['budget'], metadata['project_type'], metadata['product_type']
+SERVICE_BUS_NAMESPACE = "mcseundevmsgsb01.servicebus.windows.net"
+SERVICE_BUS_QUEUE = "ems-standard"
+SERVICE_BUS_PUBLISHER = "project-charter-service"
 
 
-def _process_question(q: dict, metadata: dict) -> int:
-    """Process a single question and extract relevant data."""
-    text = q.get("text")
-    if not isinstance(text, str):
-        return 0
-    
-    t = text.strip().lower()
-    _extract_question_metadata(t, q, metadata)
-    return _get_question_score(q)
+import json
+from azure.identity import DefaultAzureCredential
+from azure.servicebus import ServiceBusClient, ServiceBusMessage
+from app.config.settings import (
+    SERVICE_BUS_NAMESPACE,
+    SERVICE_BUS_QUEUE,
+    SERVICE_BUS_PUBLISHER,
+)
 
 
-def _extract_question_metadata(t: str, q: dict, metadata: dict):
-    """Extract budget, project_type, and product_type from question."""
-    if t.startswith("what is your expected budget"):
-        metadata['budget'] = q.get("answer")
-    elif t.startswith("can you specify your project type"):
-        metadata['project_type'] = q.get("answer")
-    elif t == "is your project product related?":
-        metadata['product_type'] = q.get("answer")
+class ServiceBusPublisher:
+
+    def __init__(self):
+        self.client = ServiceBusClient(
+            fully_qualified_namespace=SERVICE_BUS_NAMESPACE,
+            credential=DefaultAzureCredential(),
+        )
+
+    def publish_email(self, payload: dict):
+
+        message = ServiceBusMessage(
+            json.dumps(payload),
+            content_type="application/json",
+        )
+
+        # REQUIRED BY THEIR PLATFORM
+        message.application_properties = {
+            "Publisher": SERVICE_BUS_PUBLISHER
+        }
+
+        with self.client.get_queue_sender(queue_name=SERVICE_BUS_QUEUE) as sender:
+            sender.send_messages(message)
 
 
-def _get_question_score(q: dict) -> int:
-    """Get score from question, checking both direct score and options."""
-    if q.get("score") is not None:
-        return int(q.get("score") or 0)
-    
-    opts = q.get("options") or []
-    if isinstance(opts, list) and opts:
-        first = opts[0]
-        if isinstance(first, dict) and first.get("score") is not None:
-            return int(first.get("score") or 0)
-    
-    return 0
+publisher = ServiceBusPublisher()
+
+
+def build_charter_email(recipients: list[str], charter_id: str) -> dict:
+
+    link = f"https://your-ui-url/charter/{charter_id}"
+
+    body = f"""
+    <html>
+    <body>
+        <p>A new project charter has been created.</p>
+        <p>Click the link below to view the charter:</p>
+        <a href="{link}">{link}</a>
+    </body>
+    </html>
+    """
+
+    return {
+        "Recipients": recipients,
+        "BccRecipients": None,
+        "Subject": "New Project Charter Created",
+        "Body": body,
+        "IsHtml": True,
+        "Sender": None,
+        }
+
+
+
+    from app.utils.service_bus import publisher
+from app.utils.email_payload import build_charter_email
+
+
+def create_charter(...):
+
+    charter = save_charter_to_db(...)
+
+    recipients = [
+        "user1@company.com",
+        "user2@company.com"
+    ]
+
+    payload = build_charter_email(
+        recipients=recipients,
+        charter_id=str(charter.id)
+    )
+
+    publisher.publish_email(payload)
+
+    return charter
