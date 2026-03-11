@@ -1,88 +1,52 @@
-SERVICE_BUS_NAMESPACE = "mcseundevmsgsb01.servicebus.windows.net"
-SERVICE_BUS_QUEUE = "ems-standard"
-SERVICE_BUS_PUBLISHER = "project-charter-service"
+from sqlalchemy import Column, String, DateTime, Integer, Text
+from sqlalchemy.dialects.postgresql import UUID
+import uuid
+
+from .base import Base
 
 
-import json
-from azure.identity import DefaultAzureCredential
-from azure.servicebus import ServiceBusClient, ServiceBusMessage
-from app.config.settings import (
-    SERVICE_BUS_NAMESPACE,
-    SERVICE_BUS_QUEUE,
-    SERVICE_BUS_PUBLISHER,
-)
-
-
-class ServiceBusPublisher:
-
-    def __init__(self):
-        self.client = ServiceBusClient(
-            fully_qualified_namespace=SERVICE_BUS_NAMESPACE,
-            credential=DefaultAzureCredential(),
-        )
-
-    def publish_email(self, payload: dict):
-
-        message = ServiceBusMessage(
-            json.dumps(payload),
-            content_type="application/json",
-        )
-
-        # REQUIRED BY THEIR PLATFORM
-        message.application_properties = {
-            "Publisher": SERVICE_BUS_PUBLISHER
-        }
-
-        with self.client.get_queue_sender(queue_name=SERVICE_BUS_QUEUE) as sender:
-            sender.send_messages(message)
-
-
-publisher = ServiceBusPublisher()
-
-
-def build_charter_email(recipients: list[str], charter_id: str) -> dict:
-
-    link = f"https://your-ui-url/charter/{charter_id}"
-
-    body = f"""
-    <html>
-    <body>
-        <p>A new project charter has been created.</p>
-        <p>Click the link below to view the charter:</p>
-        <a href="{link}">{link}</a>
-    </body>
-    </html>
+class ReferenceDocument(Base):
+    """
+    Stores reference document links used in charter page.
+    Each update creates a new row to maintain version history.
     """
 
-    return {
-        "Recipients": recipients,
-        "BccRecipients": None,
-        "Subject": "New Project Charter Created",
-        "Body": body,
-        "IsHtml": True,
-        "Sender": None,
-        }
+    __tablename__ = "reference_documents"
 
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
 
-
-    from app.utils.service_bus import publisher
-from app.utils.email_payload import build_charter_email
-
-
-def create_charter(...):
-
-    charter = save_charter_to_db(...)
-
-    recipients = [
-        "user1@company.com",
-        "user2@company.com"
-    ]
-
-    payload = build_charter_email(
-        recipients=recipients,
-        charter_id=str(charter.id)
+    document_code = Column(
+        String,
+        nullable=False,
+        doc="Identifier of the document (PM_LITE, FULL_S9, PILM, PAR)"
     )
 
-    publisher.publish_email(payload)
+    document_name = Column(
+        String,
+        nullable=False,
+        doc="Name displayed as hyperlink in charter page"
+    )
 
-    return charter
+    document_url = Column(
+        Text,
+        nullable=False,
+        doc="URL of the document"
+    )
+
+    version = Column(
+        Integer,
+        nullable=False,
+        doc="Version of the document link"
+    )
+
+    created_by = Column(
+        UUID(as_uuid=True),
+        nullable=True,
+        doc="User who created or updated the document"
+    )
+
+    created_at = Column(
+        DateTime(timezone=True),
+        nullable=False,
+        doc="Timestamp when the record was created"
+    )
