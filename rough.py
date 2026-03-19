@@ -1,11 +1,7 @@
-@router.get("/debug/db-check")
-async def check_column(session: AsyncSession = Depends(get_db_session)):
+@router.get("/debug/alembic-history")
+async def alembic_history(session: AsyncSession = Depends(get_db_session)):
     result = await session.execute(
-        text("""
-            SELECT column_name 
-            FROM information_schema.columns 
-            WHERE table_name = 'charter'
-            AND column_name = 'generation_started_at'
-        """)
+        text("SELECT * FROM alembic_version")
     )
-    return {"exists": bool(result.scalar())}
+    rows = result.fetchall()
+    return {"versions": [row[0] for row in rows]}
