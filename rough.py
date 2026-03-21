@@ -1,20 +1,13 @@
-from sqlalchemy import text
+@router.get("/kpi/debug/charters-structure-detailed")
+async def get_charters_structure_detailed(session: AsyncSession = Depends(get_db_session)):
+    result = await session.execute(text("""
+        SELECT 
+            column_name, 
+            data_type, 
+            is_nullable,
+            column_default
+        FROM information_schema.columns
+        WHERE table_name = 'charters'
+    """))
 
-@router.post("/kpi/debug/add-column")
-async def add_column(session: AsyncSession = Depends(get_db_session)):
-    try:
-        await session.execute(text("""
-            ALTER TABLE charters 
-            ADD COLUMN generation_started_at TIMESTAMP WITH TIME ZONE
-        """))
-        await session.commit()
-        return {"status": "column added successfully"}
-    except Exception as e:
-        await session.rollback()
-        return {"error": str(e)}
-
-
-await session.execute(text("""
-    ALTER TABLE charters 
-    ADD COLUMN IF NOT EXISTS generation_started_at TIMESTAMP WITH TIME ZONE
-"""))
+    return [dict(row._mapping) for row in result]
