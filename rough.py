@@ -1,170 +1,169 @@
-import os
+# Databricks
+DATABRICKS_HOST = os.getenv("DATABRICKS_HOST")
+DATABRICKS_TOKEN = os.getenv("DATABRICKS_TOKEN")
+
+# Volume base path
+DATABRICKS_VOLUME_BASE_PATH = "/Volumes/dev_cdp_eng_adb_catalog/raw/apdlit"
+
+# File specific paths
+DATABRICKS_FILE_PATHS = {
+    "pilm": f"{DATABRICKS_VOLUME_BASE_PATH}/pilm/",
+    "par": f"{DATABRICKS_VOLUME_BASE_PATH}/par/",
+    "aorta": f"{DATABRICKS_VOLUME_BASE_PATH}/aorta/",
+    "henry": f"{DATABRICKS_VOLUME_BASE_PATH}/henry/",
+    "skills": f"{DATABRICKS_VOLUME_BASE_PATH}/skills/",
+}
+
+
+import io
+import requests
 import pandas as pd
-from datetime import datetime
 from fastapi import UploadFile, HTTPException
-
-# ===== CONFIG =====
-BASE_PATH = "/dbfs/Volumes/your_catalog/your_schema/your_volume/files"
+from app.config import Config
 
 
-# ===== COMMON HELPERS =====
+# ==============================
+# COLUMN VALIDATIONS
+# ==============================
 
-def _save_file(file: UploadFile, base_name: str):
-    os.makedirs(BASE_PATH, exist_ok=True)
-
-    timestamp = datetime.now().strftime("%Y%m%d%H%M%S")
-    versioned_name = f"{base_name}_{timestamp}"
-    latest_name = f"{base_name}_latest"
-
-    versioned_path = os.path.join(BASE_PATH, versioned_name)
-    latest_path = os.path.join(BASE_PATH, latest_name)
-
-    file.file.seek(0)
-    with open(versioned_path, "wb") as f:
-        f.write(file.file.read())
-
-    file.file.seek(0)
-    with open(latest_path, "wb") as f:
-        f.write(file.file.read())
-
-    return versioned_name
-
-
-def _read_tabular_file(file: UploadFile):
-    try:
-        if file.filename.endswith(".csv"):
-            return pd.read_csv(file.file)
-        return pd.read_excel(file.file)
-    except Exception:
-        raise HTTPException(
-            status_code=400,
-            detail="Invalid file. Unable to read Excel/CSV"
-        )
-
-
-def _validate_columns(df, required_columns):
-    df_cols = [col.strip() for col in df.columns]
-
-    missing = [col for col in required_columns if col not in df_cols]
-
-    if missing:
-        raise HTTPException(
-            status_code=400,
-            detail=f"Missing required columns: {missing}"
-        )
-
-
-def _validate_pdf_name(file: UploadFile, keyword: str):
-    if keyword not in file.filename.lower():
-        raise HTTPException(
-            status_code=400,
-            detail=f"Invalid file name. Must contain '{keyword}'"
-        )
-
-
-# ===== SERVICE FUNCTIONS =====
-
-# 1️⃣ PILM
-async def handle_pilm_upload(file: UploadFile):
-    _validate_pdf_name(file, "pilm")
-
-    saved = _save_file(file, "pilm.pdf")
-
-    return {
-        "message": "PILM uploaded successfully",
-        "version": saved
-    }
-
-
-# 2️⃣ PAR
-async def handle_par_upload(file: UploadFile):
-    _validate_pdf_name(file, "par")
-
-    saved = _save_file(file, "par.pdf")
-
-    return {
-        "message": "PAR uploaded successfully",
-        "version": saved
-    }
-
-
-# 3️⃣ AORTA
-async def handle_aorta_upload(file: UploadFile):
-    df = _read_tabular_file(file)
-
-    _validate_columns(df, ["Finding", "Action"])
-
-    saved = _save_file(file, "aorta.xlsx")
-
-    return {
-        "message": "AORTA uploaded successfully",
-        "version": saved
-    }
-
-
-# 4️⃣ HENRY
-async def handle_henry_upload(file: UploadFile):
-    df = _read_tabular_file(file)
-
-    required_columns = [
+REQUIRED_COLUMNS = {
+    "aorta": {"Finding", "Action"},
+    "henry": {
         "Context of project",
         "Category",
         "Sub-category",
         "Lesson Description",
         "Impact",
         "Short term action",
-        "Long term action"
-    ]
-
-    _validate_columns(df, required_columns)
-
-    saved = _save_file(file, "henry.xlsx")
-
-    return {
-        "message": "Henry uploaded successfully",
-        "version": saved
-    }
-
-
-# 5️⃣ SKILLS & RESPONSIBILITIES
-async def handle_skills_upload(file: UploadFile):
-    df = _read_tabular_file(file)
-
-    _validate_columns(df, [
+        "Long term action",
+    },
+    "skills": {
         "Job Profile",
         "Skills",
         "Responsibilities",
-        "Tasks"
-    ])
+        "Tasks",
+    },
+}
 
-    saved = _save_file(file, "skills.xlsx")
 
-    return {
-        "message": "Skills file uploaded successfully",
-        "version": saved
+# ==============================
+# MAIN SERVICE FUNCTION
+# ==============================
+
+async def process_upload(file_type: str, file: UploadFile):
+
+    # --------------------------
+    # 1. Get config
+    # --------------------------
+    host = Config.DATABRICKS_HOST
+    token = Config.DATABRICKS_TOKEN
+    file_paths = Config.DATABRICKS_FILE_PATHS
+
+    if not host or not token:
+        raise HTTPException(
+            status_code=500,
+            detail="Databricks configuration missing"
+        )
+
+    # --------------------------
+    # 2. Validate file type
+    # --------------------------
+    if file_type not in file_paths:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Invalid file type: {file_type}"
+        )
+
+    filename = file.filename.lower()
+
+    # --------------------------
+    # 3. PDF validation
+    # --------------------------
+    if file_type in ["pilm", "par"]:
+        if not filename.endswith(".pdf"):
+            raise HTTPException(
+                status_code=400,
+                detail="Only PDF files allowed"
+            )
+
+        if file_type not in filename:
+            raise HTTPException(
+                status_code=400,
+                detail=f"Filename must contain '{file_type}'"
+            )
+
+        contents = await file.read()
+
+    # --------------------------
+    # 4. Excel/CSV validation
+    # --------------------------
+    else:
+        if not (filename.endswith(".xlsx") or filename.endswith(".csv")):
+            raise HTTPException(
+                status_code=400,
+                detail="Only Excel or CSV files allowed"
+            )
+
+        contents = await file.read()
+
+        try:
+            if filename.endswith(".csv"):
+                df = pd.read_csv(io.BytesIO(contents))
+            else:
+                df = pd.read_excel(io.BytesIO(contents))
+        except Exception:
+            raise HTTPException(
+                status_code=400,
+                detail="Invalid file format"
+            )
+
+        required_cols = REQUIRED_COLUMNS.get(file_type, set())
+        file_cols = set(df.columns.str.strip())
+
+        missing = required_cols - file_cols
+
+        if missing:
+            raise HTTPException(
+                status_code=400,
+                detail=f"Missing columns: {list(missing)}"
+            )
+
+    # --------------------------
+    # 5. Upload to Databricks
+    # --------------------------
+    upload_path = file_paths[file_type] + file.filename
+
+    url = f"{host}/api/2.0/fs/files{upload_path}"
+
+    headers = {
+        "Authorization": f"Bearer {token}",
+        "Content-Type": "application/octet-stream"
     }
 
+    response = requests.put(url, headers=headers, data=contents)
+
+    if response.status_code not in [200, 201]:
+        raise HTTPException(
+            status_code=500,
+            detail=f"Upload failed: {response.text}"
+        )
+
+    # --------------------------
+    # 6. Success response
+    # --------------------------
+    return {
+        "message": "File uploaded successfully",
+        "file_type": file_type,
+        "file_name": file.filename,
+        "path": upload_path
+}
 
 
-from app.services.upload_file_service import (
-    handle_pilm_upload,
-    handle_par_upload,
-    handle_aorta_upload,
-    handle_henry_upload,
-    handle_skills_upload
-              )
 
-if file_type == "pilm":
-    return await handle_pilm_upload(file)
 
-elif file_type == "par":
-    return await handle_par_upload(file)
 
-elif file_type == "aorta":
-    return await handle_aorta_upload(file)
+from app.services.upload_file_service import process_upload
 
-elif file_type == "henry":
-    return await handle_henry_upload(file)
-
-elif file_type == "skills_and_responsibilities":
-    return await handle_skills_upload(file)
+@router.post("/upload-file/{file_type}")
+async def upload_file(file_type: str, file: UploadFile = File(...)):
+    return await process_upload(file_type, file)
