@@ -1,67 +1,42 @@
-from fastapi import APIRouter, UploadFile, File, HTTPException
-from app.services.upload_file_service import process_upload
+def set_databricks_env(cfg=None):
+    """
+    Sets BOTH primary and CDP Databricks environments
+    """
 
-router = APIRouter()
+    if os.getenv("SKIP_AZURE_AUTH") or os.getenv("SKIP_DBX_AUTH_ON_STARTUP"):
+        os.environ["DATABRICKS_TOKEN"] = "dummy-token"
+        os.environ["DATABRICKS_CDP_TOKEN"] = "dummy-token"
+        return
 
-# Allowed file types (match service + config)
-ALLOWED_FILE_TYPES = {
-    "pilm",
-    "par",
-    "aorta",
-    "henry",
-    "skills"
-}
+    if cfg is None:
+        from hydra import compose, initialize
+        with initialize(config_path="../config", version_base=None):
+            cfg = compose(config_name="config")
 
-# Allowed extensions
-ALLOWED_EXTENSIONS = {".pdf", ".xlsx", ".csv"}
-
-
-def get_file_extension(filename: str) -> str:
-    return "." + filename.split(".")[-1].lower()
-
-
-@router.post("/upload-file/{file_type}")
-async def upload_file(file_type: str, file: UploadFile = File(...)):
+    credential = DefaultAzureCredential()
 
     # --------------------------
-    # 1. Normalize file_type
+    # PRIMARY WORKSPACE
     # --------------------------
-    file_type = file_type.strip().lower().replace(" ", "_")
+    primary_host = os.getenv("DATABRICKS_HOST") or cfg.databricks.databricks_host
+    primary_resource = cfg.databricks.resource
 
-    # handle frontend mismatch
-    if file_type == "skills_and_responsibilities":
-        file_type = "skills"
+    primary_token = credential.get_token(primary_resource).token
 
-    # --------------------------
-    # 2. Validate file type
-    # --------------------------
-    if file_type not in ALLOWED_FILE_TYPES:
-        raise HTTPException(
-            status_code=400,
-            detail=f"Invalid file type. Allowed: {list(ALLOWED_FILE_TYPES)}"
-        )
+    os.environ["DATABRICKS_HOST"] = primary_host
+    os.environ["DATABRICKS_TOKEN"] = primary_token
+
+    logger.info(f"Primary DBX set: {primary_host}")
 
     # --------------------------
-    # 3. Validate file presence
+    # CDP WORKSPACE (NEW)
     # --------------------------
-    if not file:
-        raise HTTPException(
-            status_code=400,
-            detail="File is required"
-        )
+    cdp_host = cfg.databricks.cdp.host
+    cdp_resource = cfg.databricks.cdp.resource
 
-    # --------------------------
-    # 4. Validate extension
-    # --------------------------
-    extension = get_file_extension(file.filename)
+    cdp_token = credential.get_token(cdp_resource).token
 
-    if extension not in ALLOWED_EXTENSIONS:
-        raise HTTPException(
-            status_code=400,
-            detail="Only .pdf, .xlsx, .csv files are allowed"
-        )
+    os.environ["DATABRICKS_CDP_HOST"] = cdp_host
+    os.environ["DATABRICKS_CDP_TOKEN"] = cdp_token
 
-    # --------------------------
-    # 5. Call service layer
-    # --------------------------
-    return await process_upload(file_type, file)
+    logger.info(f"CDP DBX set: {cdp_host}")
