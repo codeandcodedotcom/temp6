@@ -1,38 +1,56 @@
-import json
+@router.post("/fix-question-6-options")
+async def fix_question_6_options():
+    from sqlalchemy import text
+    from app.db.session import get_db
+    from fastapi import HTTPException
 
-def update_latest_file(host, token, base_path, file_type, filename):
-    latest_path = f"{base_path}/{file_type}/latest.json"
+    db = next(get_db())
 
-    url = f"{host}/api/2.0/fs/files{latest_path}?overwrite=true"
+    try:
+        updates = [
+            {
+                "option_id": "99e420ae-2344-46cc-86b0-e39ebf9027c0",
+                "new_text": "No, although my function often relies on military funding",
+            },
+            {
+                "option_id": "23a50d39-9c81-474e-bf6e-0670cef58404",
+                "new_text": "Yes, it is fully funded",
+            },
+            {
+                "option_id": "c2c7bb97-712a-4f4a-909d-e6b47a8576bf",
+                "new_text": "No, my function is not supported by military funding",
+            },
+        ]
 
-    headers = {
-        "Authorization": f"Bearer {token}",
-        "Content-Type": "application/json"
-    }
+        total_updated = 0
 
-    payload = {
-        "current_file": filename
-    }
+        for item in updates:
+            result = db.execute(
+                text("""
+                    UPDATE question_options
+                    SET option_text = :new_text
+                    WHERE option_id = :option_id
+                """),
+                {
+                    "new_text": item["new_text"],
+                    "option_id": item["option_id"],
+                }
+            )
+            total_updated += result.rowcount
 
-    response = requests.put(
-        url,
-        headers=headers,
-        data=json.dumps(payload)
-    )
+        db.commit()
 
-    if not response.ok:
+        return {
+            "message": "Options updated successfully",
+            "rows_updated": total_updated
+        }
+
+    except Exception as e:
+        db.rollback()
         raise HTTPException(
             status_code=500,
-            detail=f"Failed to update latest.json: {response.text}"
+            detail=f"Update failed: {str(e)}"
         )
 
 
 
-# Update latest.json
-update_latest_file(
-    host=host,
-    token=token,
-    base_path=BASE_PATH,
-    file_type=file_type,
-    filename=new_filename
-    )
